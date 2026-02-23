@@ -1,0 +1,33 @@
+<idea-plugin>
+
+    <id>com.frshaka.gitbot</id>
+
+    <name>GitBot Commit</name>
+
+    <vendor url="https://frshaka.com">Felipe Rosa - frshaka</vendor>
+
+    <description><![CDATA[
+        AI-powered commit message generator using OpenRouter.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>Git4Idea</depends>
+
+    <actions>
+        <action id="com.frshaka.gitbot.GenerateCommitAction"
+                class="com.frshaka.gitbot.actions.GenerateCommitAction"
+                text="AI Commit"
+                description="Generate commit message from staged changes using OpenRouter AI"
+                icon="AllIcons.Actions.Lightning">
+            <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
+        </action>
+    </actions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationConfigurable
+                id="com.frshaka.gitbot.settings"
+                displayName="GitBot Commit"
+                instance="com.frshaka.gitbot.settings.GitBotConfigurable"/>
+    </extensions>
+
+</idea-plugin>
