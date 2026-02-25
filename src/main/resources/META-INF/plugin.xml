@@ -1,13 +1,45 @@
-<idea-plugin>
+<idea-plugin url="https://github.com/frshaka/GitBotCommitPlugin">
 
     <id>com.frshaka.gitbot</id>
 
     <name>GitBot Commit</name>
 
-    <vendor url="https://frshaka.com">Felipe Rosa - frshaka</vendor>
+    <vendor url="https://frshaka.com">Felipe Rosa, frshaka</vendor>
 
     <description><![CDATA[
-        AI-powered commit message generator using OpenRouter.
+        <b>GitBot Commit</b> generates AI commit messages directly from your staged changes,
+        integrated into the IntelliJ IDEA Git Commit workflow.<br/><br/>
+
+        <b>How it works:</b><br/>
+        Click the <b>&#x26A1; AI Commit</b> action in the Commit UI. GitBot reads your staged diff
+        (<code>git diff --cached</code>), sends it to an AI model via
+        <a href="https://openrouter.ai">OpenRouter</a>, and writes a structured commit message following
+        the <b>Conventional Commits</b> style.<br/><br/>
+
+        <b>Features:</b>
+        <ul>
+            <li>Generates commit messages from staged changes</li>
+            <li>Conventional Commits style: <code>feat</code>, <code>fix</code>, <code>refactor</code>, <code>docs</code>, <code>chore</code>, <code>test</code>, <code>style</code></li>
+            <li>Supports output language: <b>English</b> and <b>Brazilian Portuguese</b></li>
+            <li>Compatible with any OpenRouter model (default is configurable in Settings)</li>
+            <li>Fully customizable prompt templates, with reset to defaults</li>
+            <li>Runs in background with progress indication and cancellation support</li>
+            <li>Secure API key storage using the IDE credential store</li>
+        </ul>
+
+        <b>Requirements:</b>
+        <ul>
+            <li>An <a href="https://openrouter.ai">OpenRouter</a> API key</li>
+            <li>IntelliJ IDEA with Git enabled</li>
+            <li>Staged changes (the plugin uses <code>git diff --cached</code>)</li>
+        </ul>
+
+        <b>Getting Started:</b><br/>
+        Go to <b>Settings &#8594; GitBot Commit</b>, set your OpenRouter API key, model, language, and prompts.
+        Then open the Commit UI and run <b>&#x26A1; AI Commit</b>.<br/><br/>
+
+        <b>License:</b> MIT.<br/>
+        <b>Source Code:</b> <a href="https://github.com/frshaka/GitBotCommitPlugin">github.com/frshaka/GitBotCommitPlugin</a>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -17,7 +49,7 @@
         <action id="com.frshaka.gitbot.GenerateCommitAction"
                 class="com.frshaka.gitbot.actions.GenerateCommitAction"
                 text="AI Commit"
-                description="Generate commit message from staged changes using OpenRouter AI"
+                description="Generate commit message from staged changes using OpenRouter"
                 icon="AllIcons.Actions.Lightning">
             <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
         </action>

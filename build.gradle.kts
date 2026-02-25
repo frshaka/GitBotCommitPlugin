@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.frshaka"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -14,7 +14,6 @@ repositories {
     }
 }
 
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
         intellijIdea("2025.2.4")
@@ -42,10 +41,30 @@ intellijPlatform {
             recommended()
         }
     }
-}
 
+    publishing {
+        // Token do Marketplace (criado no perfil do JetBrains Marketplace)
+        // Melhor prática: injetar por variável de ambiente/Gradle property, não hardcode.
+        token.set(
+            providers.environmentVariable("JB_MARKETPLACE_TOKEN")
+                .orElse(providers.gradleProperty("jbMarketplaceToken"))
+        )
+
+        // Para release normal no canal default:
+        channels.set(listOf("default"))
+
+        // Se quiser soltar beta/alpha primeiro, troca para:
+        // channels.set(listOf("alpha"))
+
+        // Opcional: publicar como hidden (não aparece publicamente após aprovação).
+        // hidden.set(true)
+    }
+
+    // Assinatura é opcional aqui.
+    // Se você for assinar depois, a própria doc do plugin mostra as opções suportadas.
+    // signing { ... }
+}
 tasks {
-    // Set the JVM compatibility versions
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
