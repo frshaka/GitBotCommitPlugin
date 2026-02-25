@@ -50,7 +50,16 @@ class GenerateCommitAction : AnAction() {
             return
         }
 
-        val fullDiff = getStagedDiff(repository.root.path)
+        val selectedChanges = e.getData(VcsDataKeys.SELECTED_CHANGES)
+            ?.takeIf { it.isNotEmpty() }
+            ?: e.getData(VcsDataKeys.CHANGES)
+                ?.takeIf { it.isNotEmpty() }
+
+        val selectedPaths = selectedChanges
+            ?.mapNotNull { it.afterRevision?.file?.path ?: it.beforeRevision?.file?.path }
+            ?.takeIf { it.isNotEmpty() }
+
+        val fullDiff = getStagedDiff(repository.root.path, selectedPaths)
         if (fullDiff.isBlank()) {
             isRunning.set(false)
             Messages.showWarningDialog(
