@@ -4,7 +4,7 @@
     <ExternalSystemSettings>
       <option name="env">
         <map>
-          <entry key="OPENROUTER_API_KEY" value="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" />
+          <entry key="OPENROUTER_API_KEY" value="" />
         </map>
       </option>
       <option name="executionName" />
