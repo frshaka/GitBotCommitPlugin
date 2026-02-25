@@ -12,7 +12,9 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.vcs.CheckinProjectPanel
 import com.intellij.openapi.vcs.VcsDataKeys
+import com.intellij.openapi.vcs.ui.Refreshable
 import com.intellij.openapi.wm.WindowManager
 import git4idea.repo.GitRepositoryManager
 import java.awt.BorderLayout
@@ -50,10 +52,9 @@ class GenerateCommitAction : AnAction() {
             return
         }
 
-        val selectedChanges = e.getData(VcsDataKeys.SELECTED_CHANGES)
-            ?.takeIf { it.isNotEmpty() }
-            ?: e.getData(VcsDataKeys.CHANGES)
-                ?.takeIf { it.isNotEmpty() }
+        val checkinPanel = e.getData(Refreshable.PANEL_KEY) as? CheckinProjectPanel
+        val selectedChanges = checkinPanel?.selectedChanges?.takeIf { it.isNotEmpty() }
+            ?: e.getData(VcsDataKeys.SELECTED_CHANGES)?.takeIf { it.isNotEmpty() }?.toList()
 
         val selectedPaths = selectedChanges
             ?.mapNotNull { it.afterRevision?.file?.path ?: it.beforeRevision?.file?.path }
@@ -154,14 +155,22 @@ class GenerateCommitAction : AnAction() {
         })
     }
 
-    private fun getStagedDiff(repoPath: String): String {
+    private fun getStagedDiff(repoPath: String, filePaths: List<String>? = null): String {
+        val cached = runGitDiff(repoPath, listOf("--cached"), filePaths)
+        if (cached.isNotBlank()) return cached
+        return runGitDiff(repoPath, listOf("HEAD"), filePaths)
+    }
+
+    private fun runGitDiff(repoPath: String, extraArgs: List<String>, filePaths: List<String>?): String {
         return try {
-            val process = ProcessBuilder(
-                "git",
-                "diff",
-                "--cached",
-                "--unified=3"
-            )
+            val args = mutableListOf("git", "diff", "--unified=3")
+            args.addAll(extraArgs)
+            if (!filePaths.isNullOrEmpty()) {
+                args.add("--")
+                args.addAll(filePaths)
+            }
+
+            val process = ProcessBuilder(args)
                 .directory(java.io.File(repoPath))
                 .redirectErrorStream(true)
                 .start()
