@@ -196,3 +196,206 @@ By default, the plugin uses the full staged diff. If you want to generate a comm
 MIT — see [LICENSE](LICENSE) for details.
 
 **Source code:** [github.com/frshaka/GitBotCommitPlugin](https://github.com/frshaka/GitBotCommitPlugin)
+
+---
+
+---
+
+# GitBot Commit — Português do Brasil
+
+**GitBot Commit** é um plugin para IntelliJ IDEA que gera mensagens de commit com inteligência artificial diretamente a partir das suas alterações staged, integrado ao fluxo nativo de Git Commit da IDE.
+
+Ele lê o seu `git diff --cached`, envia para um modelo de IA via [OpenRouter](https://openrouter.ai) e escreve uma mensagem de commit estruturada seguindo o padrão **Conventional Commits** com emojis.
+
+---
+
+## Requisitos
+
+- IntelliJ IDEA (2022.1 ou superior)
+- Git habilitado no projeto
+- Uma conta e chave de API no [OpenRouter](https://openrouter.ai)
+- Ao menos uma alteração staged (`git add`) antes de executar o plugin
+
+---
+
+## Instalação
+
+1. Abra o IntelliJ IDEA
+2. Acesse **Settings → Plugins → Marketplace**
+3. Pesquise por **GitBot Commit**
+4. Clique em **Install** e reinicie a IDE
+
+---
+
+## Configuração
+
+Antes de usar o plugin, é necessário configurá-lo nas preferências da IDE.
+
+### Passo 1 — Abrir as Configurações
+
+Acesse **Settings** (ou **Preferences** no macOS) → **GitBot Commit**
+
+### Passo 2 — Definir a chave de API do OpenRouter
+
+- Cole sua chave de API do OpenRouter no campo **OpenRouter API Key**
+- A chave é armazenada com segurança usando o armazenamento de credenciais nativo da IDE (não em texto simples)
+
+> Para obter uma chave, crie uma conta em [openrouter.ai](https://openrouter.ai) e gere uma chave no seu painel.
+
+### Passo 3 — Escolher um Modelo
+
+- No campo **Model**, informe o ID do modelo que deseja usar
+- Padrão: `anthropic/claude-3.5-sonnet`
+- Você pode usar qualquer modelo disponível no OpenRouter. Exemplos:
+  - `anthropic/claude-3.5-sonnet`
+  - `openai/gpt-4o`
+  - `google/gemini-pro`
+  - `meta-llama/llama-3-70b-instruct`
+
+> Consulte os modelos disponíveis em [openrouter.ai/models](https://openrouter.ai/models)
+
+### Passo 4 — Selecionar o Idioma do Commit
+
+- Use o seletor **Commit language** para escolher o idioma de saída
+- Opções disponíveis:
+  - `PT_BR` — Português do Brasil
+  - `EN` — Inglês
+
+> Cada idioma possui seu próprio template de prompt independente.
+
+### Passo 5 — Revisar o Template de Prompt (opcional)
+
+- O campo **Prompt Template** exibe o prompt de sistema enviado à IA para o idioma selecionado
+- Ele vem pré-configurado com um prompt orientado ao Conventional Commits
+- Você pode editá-lo livremente para ajustar tom, formato, convenções de escopo ou qualquer outro comportamento
+- Clique em **Reset to default** para restaurar o prompt original do idioma selecionado a qualquer momento
+
+### Passo 6 — Aplicar
+
+Clique em **Apply** ou **OK** para salvar as configurações.
+
+---
+
+## Uso
+
+### Passo 1 — Faça o stage das suas alterações
+
+No terminal ou no painel Git do IntelliJ, adicione ao stage os arquivos que deseja incluir no commit:
+
+```bash
+git add <arquivo>
+# ou adicionar todas as alterações
+git add .
+```
+
+> O plugin lê apenas as alterações staged (`git diff --cached`). Alterações não staged são ignoradas.
+
+### Passo 2 — Abrir o painel de Commit
+
+Abra o painel de Commit do IntelliJ usando uma das opções abaixo:
+- **Atalho de teclado:** `Ctrl+K` (Windows/Linux) ou `Cmd+K` (macOS)
+- **Menu:** Git → Commit
+
+### Passo 3 — Executar o plugin
+
+No painel de Commit, localize a ação **⚡ AI Commit** na barra de ferramentas acima do campo de mensagem.
+
+Clique em **⚡ AI Commit** para iniciar a geração.
+
+> Um indicador de progresso aparecerá na parte inferior da IDE enquanto o modelo processa o diff.
+> Você pode cancelar a geração a qualquer momento clicando no botão **X** na barra de progresso.
+
+### Passo 4 — Revisar a mensagem gerada
+
+Um diálogo de pré-visualização será aberto com a mensagem gerada. A partir dele você pode:
+
+| Botão | Ação |
+|-------|------|
+| **Edit** | Torna o campo de texto editável para ajustar a mensagem antes de aplicar |
+| **Copy** | Copia a mensagem para a área de transferência |
+| **Apply** | Insere a mensagem no campo de commit do IntelliJ e fecha o diálogo |
+| **Cancel** | Descarta a mensagem gerada |
+
+### Passo 5 — Commit
+
+Após clicar em **Apply**, a mensagem gerada aparecerá no campo de mensagem do painel de Commit.
+
+Revise, faça ajustes finais se necessário, e clique em **Commit** (ou **Commit and Push**).
+
+> Após um commit bem-sucedido, o campo de mensagem é limpo automaticamente e fica pronto para o próximo commit.
+
+---
+
+## Formato da Mensagem de Commit
+
+O plugin gera mensagens seguindo a especificação [Conventional Commits](https://www.conventionalcommits.org) com emojis:
+
+```
+<emoji><tipo>[escopo opcional]: <descrição>
+
+<corpo explicando as alterações>
+```
+
+### Tipos e emojis
+
+| Tipo       | Emoji | Quando usar                               |
+|------------|-------|-------------------------------------------|
+| `feat`     | ✨    | Nova funcionalidade                       |
+| `fix`      | 🐛    | Correção de bug                           |
+| `refactor` | ♻️    | Reestruturação de código sem mudança de comportamento |
+| `docs`     | 📝    | Alterações na documentação               |
+| `chore`    | 🔧    | Alterações de build, config ou ferramentas |
+| `test`     | 🧪    | Adição ou atualização de testes           |
+| `style`    | 🎨    | Formatação, espaços em branco, estilo de código |
+
+### Regra de prioridade
+
+Quando um diff contém múltiplos tipos de alteração, o plugin seleciona o tipo de maior impacto:
+
+```
+fix > feat > refactor > chore > docs > test > style
+```
+
+### Exemplo de saída
+
+```
+✨feat(auth): adiciona suporte a login OAuth2
+
+Implementa o fluxo OAuth2 do Google usando o gerenciador de sessão existente.
+Adiciona endpoint de callback e lógica de troca de token.
+Atualiza o modelo de usuário para armazenar o provedor e o ID externo.
+```
+
+---
+
+## Selecionando arquivos específicos
+
+Por padrão, o plugin utiliza o diff completo de todos os arquivos staged. Se quiser gerar uma mensagem de commit com base em um **subconjunto de arquivos**, selecione-os na lista de arquivos do painel de Commit antes de clicar em **⚡ AI Commit**. O plugin restringirá o diff apenas aos arquivos selecionados.
+
+---
+
+## Solução de Problemas
+
+| Problema | Solução |
+|----------|---------|
+| "No Git repository found" | Verifique se o projeto possui um repositório Git inicializado (`git init`) |
+| "No staged changes found" | Faça o stage das suas alterações com `git add` antes de usar o plugin |
+| "Configure your OpenRouter API key" | Acesse **Settings → GitBot Commit** e informe sua chave de API |
+| "Configure the model" | Acesse **Settings → GitBot Commit** e informe um ID de modelo válido |
+| Mensagem de erro do OpenRouter | Verifique sua chave de API, créditos da conta e o ID do modelo em openrouter.ai |
+| Mensagem não aplicada após clicar em Apply | Se `setCommitMessage` falhar silenciosamente, a mensagem é copiada para a área de transferência como fallback |
+
+---
+
+## Segurança
+
+- A chave de API é armazenada usando o **armazenamento de credenciais nativo** do IntelliJ (keychain do SO / segredos da IDE), nunca gravada em texto simples em nenhum arquivo de configuração
+- O conteúdo do diff é enviado diretamente à API do OpenRouter via HTTPS e está sujeito à [política de privacidade](https://openrouter.ai/privacy) deles
+
+---
+
+## Licença
+
+MIT — veja [LICENSE](LICENSE) para detalhes.
+
+**Código-fonte:** [github.com/frshaka/GitBotCommitPlugin](https://github.com/frshaka/GitBotCommitPlugin)
