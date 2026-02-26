@@ -7,39 +7,85 @@
     <vendor url="https://frshaka.com">Felipe Rosa, frshaka</vendor>
 
     <description><![CDATA[
-        <b>GitBot Commit</b> generates AI commit messages directly from your staged changes,
-        integrated into the IntelliJ IDEA Git Commit workflow.<br/><br/>
+        <b>GitBot Commit</b> generates AI-powered commit messages directly from your staged changes,
+        integrated into IntelliJ IDEA's native Git Commit workflow.<br/><br/>
 
-        <b>How it works:</b><br/>
-        Click the <b>&#x26A1; AI Commit</b> action in the Commit UI. GitBot reads your staged diff
-        (<code>git diff --cached</code>), sends it to an AI model via
-        <a href="https://openrouter.ai">OpenRouter</a>, and writes a structured commit message following
-        the <b>Conventional Commits</b> style.<br/><br/>
+        It reads your <code>git diff --cached</code>, sends it to an AI model via
+        <a href="https://openrouter.ai">OpenRouter</a>, and writes a structured message following the
+        <b>Conventional Commits</b> standard with emojis.<br/><br/>
 
-        <b>Features:</b>
+        <hr/>
+
+        <b>Features</b>
         <ul>
-            <li>Generates commit messages from staged changes</li>
+            <li>Generates commit messages from staged changes (<code>git diff --cached</code>)</li>
             <li>Conventional Commits style: <code>feat</code>, <code>fix</code>, <code>refactor</code>, <code>docs</code>, <code>chore</code>, <code>test</code>, <code>style</code></li>
-            <li>Supports output language: <b>English</b> and <b>Brazilian Portuguese</b></li>
-            <li>Compatible with any OpenRouter model (default is configurable in Settings)</li>
-            <li>Fully customizable prompt templates, with reset to defaults</li>
-            <li>Runs in background with progress indication and cancellation support</li>
-            <li>Secure API key storage using the IDE credential store</li>
+            <li>Output language: <b>English</b> or <b>Brazilian Portuguese</b></li>
+            <li>Compatible with any model available on OpenRouter</li>
+            <li>Fully customizable prompt templates, with one-click reset to defaults</li>
+            <li>Preview dialog with Edit and Copy options before applying</li>
+            <li>Runs in background with progress indicator and cancellation support</li>
+            <li>Commit message field is automatically cleared after a successful commit</li>
+            <li>Secure API key storage via the IDE credential store</li>
         </ul>
 
-        <b>Requirements:</b>
+        <b>Requirements</b>
         <ul>
+            <li>IntelliJ IDEA 2022.1 or later, with Git enabled</li>
             <li>An <a href="https://openrouter.ai">OpenRouter</a> API key</li>
-            <li>IntelliJ IDEA with Git enabled</li>
-            <li>Staged changes (the plugin uses <code>git diff --cached</code>)</li>
+            <li>At least one staged change (<code>git add</code>) before running the plugin</li>
         </ul>
 
-        <b>Getting Started:</b><br/>
-        Go to <b>Settings &#8594; GitBot Commit</b>, set your OpenRouter API key, model, language, and prompts.
-        Then open the Commit UI and run <b>&#x26A1; AI Commit</b>.<br/><br/>
+        <hr/>
 
-        <b>License:</b> MIT.<br/>
-        <b>Source Code:</b> <a href="https://github.com/frshaka/GitBotCommitPlugin">github.com/frshaka/GitBotCommitPlugin</a>
+        <b>Setup (one time)</b><br/><br/>
+
+        <b>1.</b> Go to <b>Settings &#8594; GitBot Commit</b><br/>
+        <b>2.</b> Paste your <b>OpenRouter API Key</b><br/>
+        <b>3.</b> Enter the <b>Model</b> ID you want to use (default: <code>anthropic/claude-3.5-sonnet</code>)<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;Browse available models at <a href="https://openrouter.ai/models">openrouter.ai/models</a><br/>
+        <b>4.</b> Choose the <b>Commit language</b>: <code>EN</code> or <code>PT_BR</code><br/>
+        <b>5.</b> Optionally edit the <b>Prompt Template</b> — or click <i>Reset to default</i> to restore it<br/>
+        <b>6.</b> Click <b>Apply</b><br/><br/>
+
+        <hr/>
+
+        <b>Usage</b><br/><br/>
+
+        <b>1.</b> Stage your changes: <code>git add &lt;file&gt;</code> (or use IntelliJ's Git panel)<br/>
+        <b>2.</b> Open the Commit panel: <code>Ctrl+K</code> / <code>Cmd+K</code><br/>
+        <b>3.</b> Click <b>&#x26A1; AI Commit</b> in the commit toolbar<br/>
+        <b>4.</b> A preview dialog opens with the generated message — review, edit if needed, then click <b>Apply</b><br/>
+        <b>5.</b> Click <b>Commit</b> (or <b>Commit and Push</b>) — the message field will be cleared automatically after success<br/><br/>
+
+        <b>Tip:</b> To scope the generation to specific files, select them in the file list before clicking <b>&#x26A1; AI Commit</b>.<br/><br/>
+
+        <hr/>
+
+        <b>Commit Message Format</b><br/><br/>
+
+        <code>&lt;emoji&gt;&lt;type&gt;[scope]: &lt;description&gt;</code><br/><br/>
+
+        <code>&lt;body explaining the changes&gt;</code><br/><br/>
+
+        Type priority when multiple change types are detected:<br/>
+        <code>fix &gt; feat &gt; refactor &gt; chore &gt; docs &gt; test &gt; style</code><br/><br/>
+
+        <hr/>
+
+        <b>Troubleshooting</b>
+        <ul>
+            <li><i>"No Git repository found"</i> — make sure the project has Git initialized</li>
+            <li><i>"No staged changes found"</i> — run <code>git add</code> before using the plugin</li>
+            <li><i>"Configure your OpenRouter API key"</i> — go to Settings &#8594; GitBot Commit</li>
+            <li><i>OpenRouter error</i> — check your API key, account credits, and model ID</li>
+            <li><i>Message not applied</i> — as a fallback, the message is copied to your clipboard</li>
+        </ul>
+
+        <hr/>
+
+        <b>License:</b> MIT &#8212;
+        <b>Source:</b> <a href="https://github.com/frshaka/GitBotCommitPlugin">github.com/frshaka/GitBotCommitPlugin</a>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -60,6 +106,7 @@
                 id="com.frshaka.gitbot.settings"
                 displayName="GitBot Commit"
                 instance="com.frshaka.gitbot.settings.GitBotConfigurable"/>
+        <checkinHandlerFactory implementation="com.frshaka.gitbot.checkin.GitBotCheckinHandlerFactory"/>
     </extensions>
 
 </idea-plugin>
