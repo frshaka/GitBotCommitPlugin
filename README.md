@@ -1,117 +1,198 @@
-# IntelliJ Platform Plugin Template
+# GitBot Commit
 
-[![Twitter Follow](https://img.shields.io/badge/follow-%40JBPlatform-1DA1F2?logo=twitter)](https://twitter.com/JBPlatform)
-[![Developers Forum](https://img.shields.io/badge/JetBrains%20Platform-Join-blue)][jb:forum]
+**GitBot Commit** is an IntelliJ IDEA plugin that generates AI-powered commit messages directly from your staged changes, integrated into the native Git Commit workflow.
 
-## Plugin template structure
+It reads your `git diff --cached`, sends it to an AI model via [OpenRouter](https://openrouter.ai), and writes a structured commit message following the **Conventional Commits** standard with emojis.
 
-A generated project contains the following content structure:
+---
+
+## Requirements
+
+- IntelliJ IDEA (2022.1 or later)
+- Git enabled in the project
+- An [OpenRouter](https://openrouter.ai) account and API key
+- At least one staged change (`git add`) before running the plugin
+
+---
+
+## Installation
+
+1. Open IntelliJ IDEA
+2. Go to **Settings → Plugins → Marketplace**
+3. Search for **GitBot Commit**
+4. Click **Install** and restart the IDE
+
+---
+
+## Configuration
+
+Before using the plugin, you need to configure it through the IDE settings.
+
+### Step 1 — Open Settings
+
+Go to **Settings** (or **Preferences** on macOS) → **GitBot Commit**
+
+### Step 2 — Set your OpenRouter API Key
+
+- Paste your OpenRouter API key in the **OpenRouter API Key** field
+- The key is stored securely using the IDE's built-in credential store (not in plain text)
+
+> To get an API key, sign up at [openrouter.ai](https://openrouter.ai) and generate a key from your dashboard.
+
+### Step 3 — Choose a Model
+
+- In the **Model** field, enter the model ID you want to use
+- Default: `anthropic/claude-3.5-sonnet`
+- You can use any model available on OpenRouter. Examples:
+  - `anthropic/claude-3.5-sonnet`
+  - `openai/gpt-4o`
+  - `google/gemini-pro`
+  - `meta-llama/llama-3-70b-instruct`
+
+> Browse available models at [openrouter.ai/models](https://openrouter.ai/models)
+
+### Step 4 — Select the Commit Language
+
+- Use the **Commit language** dropdown to choose the output language
+- Available options:
+  - `PT_BR` — Brazilian Portuguese
+  - `EN` — English
+
+> Each language has its own independent prompt template.
+
+### Step 5 — Review the Prompt Template (optional)
+
+- The **Prompt Template** field shows the system prompt sent to the AI for the selected language
+- It comes pre-configured with a Conventional Commits-oriented prompt
+- You can edit it freely to adjust tone, format, scope conventions, or any other behavior
+- Click **Reset to default** to restore the original prompt for the selected language at any time
+
+### Step 6 — Apply
+
+Click **Apply** or **OK** to save your settings.
+
+---
+
+## Usage
+
+### Step 1 — Stage your changes
+
+In your terminal or IntelliJ's Git panel, stage the files you want to include in the commit:
+
+```bash
+git add <file>
+# or stage all changes
+git add .
+```
+
+> The plugin only reads staged changes (`git diff --cached`). Unstaged changes are ignored.
+
+### Step 2 — Open the Commit panel
+
+Open IntelliJ's Git Commit panel using one of the following:
+- **Keyboard shortcut:** `Ctrl+K` (Windows/Linux) or `Cmd+K` (macOS)
+- **Menu:** Git → Commit
+
+### Step 3 — Run the plugin
+
+In the Commit panel, locate the **⚡ AI Commit** action. It appears in the toolbar at the top of the commit message area.
+
+Click **⚡ AI Commit** to start the generation.
+
+> A background progress indicator will appear at the bottom of the IDE while the model processes your diff.
+> You can cancel the generation at any time by clicking the **X** button on the progress bar.
+
+### Step 4 — Review the generated message
+
+A preview dialog will open displaying the generated commit message. From here you can:
+
+| Button | Action |
+|--------|--------|
+| **Edit** | Makes the text area editable so you can adjust the message before applying |
+| **Copy** | Copies the message to your clipboard |
+| **Apply** | Inserts the message into IntelliJ's commit message field and closes the dialog |
+| **Cancel** | Discards the generated message |
+
+### Step 5 — Commit
+
+After clicking **Apply**, the generated message will appear in the Commit panel's message field.
+
+Review it, make any final edits if needed, and click **Commit** (or **Commit and Push**).
+
+> After a successful commit, the message field is automatically cleared and ready for the next commit.
+
+---
+
+## Commit Message Format
+
+The plugin generates messages following the [Conventional Commits](https://www.conventionalcommits.org) specification with emojis:
 
 ```
-.
-├── .run/                   Predefined Run/Debug Configurations
-├── build/                  Output build directory
-├── gradle
-│   ├── wrapper/            Gradle Wrapper
-├── src                     Plugin sources
-│   ├── main
-│   │   ├── kotlin/         Kotlin production sources
-│   │   └── resources/      Resources - plugin.xml, icons, messages
-├── .gitignore              Git ignoring rules
-├── build.gradle.kts        Gradle build configuration
-├── gradle.properties       Gradle configuration properties
-├── gradlew                 *nix Gradle Wrapper script
-├── gradlew.bat             Windows Gradle Wrapper script
-├── README.md               README
-└── settings.gradle.kts     Gradle project settings
+<emoji><type>[optional scope]: <description>
+
+<body explaining the changes>
 ```
 
-In addition to the configuration files, the most crucial part is the `src` directory, which contains our implementation
-and the manifest for our plugin – [plugin.xml][file:plugin.xml].
+### Types and emojis
 
-> [!NOTE]
-> To use Java in your plugin, create the `/src/main/java` directory.
+| Type       | Emoji | When to use                        |
+|------------|-------|------------------------------------|
+| `feat`     | ✨    | New feature                        |
+| `fix`      | 🐛    | Bug fix                            |
+| `refactor` | ♻️    | Code restructuring without behavior change |
+| `docs`     | 📝    | Documentation changes              |
+| `chore`    | 🔧    | Build, config, or tooling changes  |
+| `test`     | 🧪    | Adding or updating tests           |
+| `style`    | 🎨    | Formatting, whitespace, code style |
 
-## Plugin configuration file
+### Priority rule
 
-The plugin configuration file is a [plugin.xml][file:plugin.xml] file located in the `src/main/resources/META-INF`
-directory.
-It provides general information about the plugin, its dependencies, extensions, and listeners.
+When a diff contains multiple change types, the plugin selects the highest-impact type:
 
-You can read more about this file in the [Plugin Configuration File][docs:plugin.xml] section of our documentation.
+```
+fix > feat > refactor > chore > docs > test > style
+```
 
-If you're still not quite sure what this is all about, read our
-introduction: [What is the IntelliJ Platform?][docs:intro]
+### Example output
 
-$H$H Predefined Run/Debug configurations
+```
+✨feat(auth): add OAuth2 login support
 
-Within the default project structure, there is a `.run` directory provided containing predefined *Run/Debug
-configurations* that expose corresponding Gradle tasks:
+Implement Google OAuth2 flow using the existing session manager.
+Add callback endpoint and token exchange logic.
+Update user model to store provider and external ID.
+```
 
-| Configuration name | Description                                                                                                                                                                         |
-|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Run Plugin         | Runs [`:runIde`][gh:intellij-platform-gradle-plugin-runIde] IntelliJ Platform Gradle Plugin task. Use the *Debug* icon for plugin debugging.                                        |
-| Run Tests          | Runs [`:test`][gradle:lifecycle-tasks] Gradle task.                                                                                                                                 |
-| Run Verifications  | Runs [`:verifyPlugin`][gh:intellij-platform-gradle-plugin-verifyPlugin] IntelliJ Platform Gradle Plugin task to check the plugin compatibility against the specified IntelliJ IDEs. |
+---
 
-> [!NOTE]
-> You can find the logs from the running task in the `idea.log` tab.
+## Selecting specific files
 
-## Publishing the plugin
+By default, the plugin uses the full staged diff. If you want to generate a commit message based on a **subset of staged files**, select them in the Commit panel's file list before clicking **⚡ AI Commit**. The plugin will restrict the diff to only those files.
 
-> [!TIP]
-> Make sure to follow all guidelines listed in [Publishing a Plugin][docs:publishing] to follow all recommended and
-> required steps.
+---
 
-Releasing a plugin to [JetBrains Marketplace](https://plugins.jetbrains.com) is a straightforward operation that uses
-the `publishPlugin` Gradle task provided by
-the [intellij-platform-gradle-plugin][gh:intellij-platform-gradle-plugin-docs].
+## Troubleshooting
 
-You can also upload the plugin to the [JetBrains Plugin Repository](https://plugins.jetbrains.com/plugin/upload)
-manually via UI.
+| Problem | Solution |
+|---------|----------|
+| "No Git repository found" | Make sure the project has a Git repository initialized (`git init`) |
+| "No staged changes found" | Stage your changes with `git add` before running the plugin |
+| "Configure your OpenRouter API key" | Go to **Settings → GitBot Commit** and enter your API key |
+| "Configure the model" | Go to **Settings → GitBot Commit** and enter a valid model ID |
+| OpenRouter error message | Check your API key, account credits, and the model ID at openrouter.ai |
+| Message not applied after clicking Apply | If `setCommitMessage` fails silently, the message is copied to your clipboard as a fallback |
 
-## Useful links
+---
 
-- [IntelliJ Platform SDK Plugin SDK][docs]
-- [IntelliJ Platform Gradle Plugin Documentation][gh:intellij-platform-gradle-plugin-docs]
-- [IntelliJ Platform Explorer][jb:ipe]
-- [JetBrains Marketplace Quality Guidelines][jb:quality-guidelines]
-- [IntelliJ Platform UI Guidelines][jb:ui-guidelines]
-- [JetBrains Marketplace Paid Plugins][jb:paid-plugins]
-- [IntelliJ SDK Code Samples][gh:code-samples]
+## Security
 
-[docs]: https://plugins.jetbrains.com/docs/intellij
+- The API key is stored using IntelliJ's native **credential store** (OS keychain / IDE secrets), never written in plain text to any config file
+- The diff content is sent directly to OpenRouter's API over HTTPS and is subject to their [privacy policy](https://openrouter.ai/privacy)
 
-[docs:intro]: https://plugins.jetbrains.com/docs/intellij/intellij-platform.html?from=IJPluginTemplate
+---
 
-[docs:plugin.xml]: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html?from=IJPluginTemplate
+## License
 
-[docs:publishing]: https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html?from=IJPluginTemplate
+MIT — see [LICENSE](LICENSE) for details.
 
-[file:plugin.xml]: ./src/main/resources/META-INF/plugin.xml
-
-[gh:code-samples]: https://github.com/JetBrains/intellij-sdk-code-samples
-
-[gh:intellij-platform-gradle-plugin]: https://github.com/JetBrains/intellij-platform-gradle-plugin
-
-[gh:intellij-platform-gradle-plugin-docs]: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
-
-[gh:intellij-platform-gradle-plugin-runIde]: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-tasks.html#runIde
-
-[gh:intellij-platform-gradle-plugin-verifyPlugin]: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-tasks.html#verifyPlugin
-
-[gradle:lifecycle-tasks]: https://docs.gradle.org/current/userguide/java_plugin.html#lifecycle_tasks
-
-[jb:github]: https://github.com/JetBrains/.github/blob/main/profile/README.md
-
-[jb:forum]: https://platform.jetbrains.com/
-
-[jb:quality-guidelines]: https://plugins.jetbrains.com/docs/marketplace/quality-guidelines.html
-
-[jb:paid-plugins]: https://plugins.jetbrains.com/docs/marketplace/paid-plugins-marketplace.html
-
-[jb:quality-guidelines]: https://plugins.jetbrains.com/docs/marketplace/quality-guidelines.html
-
-[jb:ipe]: https://jb.gg/ipe
-
-[jb:ui-guidelines]: https://jetbrains.github.io/ui
+**Source code:** [github.com/frshaka/GitBotCommitPlugin](https://github.com/frshaka/GitBotCommitPlugin)
