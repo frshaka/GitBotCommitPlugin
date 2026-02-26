@@ -53,6 +53,8 @@ class GenerateCommitAction : AnAction() {
         }
 
         val checkinPanel = e.getData(Refreshable.PANEL_KEY) as? CheckinProjectPanel
+
+        // Arquivos rastreados pelo git (já staged) que estão marcados no painel de commit
         val selectedChanges = checkinPanel?.selectedChanges?.takeIf { it.isNotEmpty() }
             ?: e.getData(VcsDataKeys.SELECTED_CHANGES)?.takeIf { it.isNotEmpty() }?.toList()
 
@@ -60,7 +62,21 @@ class GenerateCommitAction : AnAction() {
             ?.mapNotNull { it.afterRevision?.file?.path ?: it.beforeRevision?.file?.path }
             ?.takeIf { it.isNotEmpty() }
 
-        val fullDiff = getStagedDiff(repository.root.path, selectedPaths)
+        // Arquivos não versionados: marcados no painel mas ainda ausentes do índice do git.
+        // CheckinProjectPanel.getFiles() retorna todos os java.io.File marcados para o commit
+        // (tanto mudanças rastreadas quanto arquivos não versionados), então subtraímos o que já
+        // está coberto por selectedPaths para isolar apenas os não versionados.
+        // Caminhos canônicos são usados na comparação para tratar diferenças de separador entre
+        // o VFS do IntelliJ (barras normais) e java.io.File no Windows (barras invertidas).
+        val trackedCanonical = selectedPaths
+            ?.map { java.io.File(it).canonicalPath }
+            ?.toSet() ?: emptySet()
+        val unversionedFiles: List<java.io.File> = checkinPanel?.files
+            ?.filter { it.canonicalPath !in trackedCanonical }
+            ?: emptyList()
+
+        val fullDiff = buildCombinedDiff(repository.root.path, selectedPaths, unversionedFiles)
+
         if (fullDiff.isBlank()) {
             isRunning.set(false)
             Messages.showWarningDialog(
@@ -155,6 +171,64 @@ class GenerateCommitAction : AnAction() {
         })
     }
 
+    /**
+     * Constrói um diff combinado cobrindo:
+     *  - arquivos rastreados (já staged), filtrados por [trackedPaths] quando fornecido;
+     *  - arquivos não versionados (ainda não no índice do git), lidos diretamente do disco.
+     *
+     * Retorna o diff completo de todos os arquivos staged como fallback quando não há seleção explícita.
+     */
+    private fun buildCombinedDiff(
+        repoPath: String,
+        trackedPaths: List<String>?,
+        unversionedFiles: List<java.io.File>
+    ): String {
+        val parts = mutableListOf<String>()
+
+        // Diff staged — executado apenas quando há caminhos rastreados selecionados,
+        // OU quando não há arquivos não versionados (fallback para o diff completo).
+        if (trackedPaths != null || unversionedFiles.isEmpty()) {
+            val staged = getStagedDiff(repoPath, trackedPaths)
+            if (staged.isNotBlank()) parts.add(staged)
+        }
+
+        // Arquivos não versionados: tenta git diff --cached primeiro (o arquivo pode ter sido
+        // staged por outro meio); caso contrário, constrói um diff sintético a partir do conteúdo.
+        for (file in unversionedFiles) {
+            val cached = runGitDiff(repoPath, listOf("--cached"), listOf(file.absolutePath))
+            if (cached.isNotBlank()) {
+                parts.add(cached)
+            } else {
+                val synthetic = getNewFileDiff(repoPath, file.absolutePath)
+                if (synthetic.isNotBlank()) parts.add(synthetic)
+            }
+        }
+
+        return parts.joinToString("\n")
+    }
+
+    /**
+     * Gera um diff unificado sintético para um arquivo que ainda não está no índice do git,
+     * formatado de forma idêntica ao que `git diff --cached` produziria após o staging.
+     */
+    private fun getNewFileDiff(repoPath: String, filePath: String): String {
+        return try {
+            val relPath = java.io.File(repoPath).toURI()
+                .relativize(java.io.File(filePath).toURI()).path
+            val lines = java.io.File(filePath).readLines(Charsets.UTF_8)
+            buildString {
+                appendLine("diff --git a/$relPath b/$relPath")
+                appendLine("new file mode 100644")
+                appendLine("--- /dev/null")
+                appendLine("+++ b/$relPath")
+                appendLine("@@ -0,0 +1,${lines.size} @@")
+                lines.forEach { line -> appendLine("+$line") }
+            }
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     private fun getStagedDiff(repoPath: String, filePaths: List<String>? = null): String {
         val cached = runGitDiff(repoPath, listOf("--cached"), filePaths)
         if (cached.isNotBlank()) return cached
@@ -166,8 +240,18 @@ class GenerateCommitAction : AnAction() {
             val args = mutableListOf("git", "diff", "--unified=3")
             args.addAll(extraArgs)
             if (!filePaths.isNullOrEmpty()) {
-                args.add("--")
-                args.addAll(filePaths)
+                val repoUri = java.io.File(repoPath).toURI()
+                val relativePaths = filePaths.mapNotNull { absPath ->
+                    try {
+                        repoUri.relativize(java.io.File(absPath).toURI()).path.ifBlank { null }
+                    } catch (_: Exception) {
+                        absPath
+                    }
+                }
+                if (relativePaths.isNotEmpty()) {
+                    args.add("--")
+                    args.addAll(relativePaths)
+                }
             }
 
             val process = ProcessBuilder(args)
