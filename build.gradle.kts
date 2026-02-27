@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.frshaka"
-version = "1.0.1"
+version = "1.0.2"
 
 repositories {
     mavenCentral()
@@ -36,6 +36,17 @@ intellijPlatform {
             sinceBuild = "252.25557"
         }
         changeNotes = """
+            <h2>New Features</h2>
+            <ul>
+                <li>
+                    <b>Support for reasoning models (Chain-of-Thought).</b><br/>
+                    Models such as DeepSeek-R1 and QwQ return an empty <code>content</code> field with an
+                    internal reasoning object on intermediate steps. The plugin now handles this automatically:
+                    it iterates through the Chain-of-Thought loop, accumulating the model's reasoning as context,
+                    until a final <code>content</code> is produced. A safety limit of 8 iterations prevents
+                    infinite loops.
+                </li>
+            </ul>
             <h2>Bug Fixes</h2>
             <ul>
                 <li>
