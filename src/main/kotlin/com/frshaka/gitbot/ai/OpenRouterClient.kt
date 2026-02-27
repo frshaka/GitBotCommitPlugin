@@ -29,32 +29,56 @@ class OpenRouterClient(
     @Volatile
     private var currentCall: Call<*>? = null
 
+    companion object {
+        // Limite de iterações do loop COT para evitar ciclo infinito em modelos de raciocínio
+        private const val MAX_COT_ITERACOES = 8
+    }
+
     fun completion(model: String, systemPrompt: String, userPrompt: String): String {
-        val request = CompletionRequest(
-            model = model,
-            messages = listOf(
-                CompletionMessage(role = "system", content = systemPrompt),
-                CompletionMessage(role = "user", content = userPrompt)
-            )
+        // Histórico de mensagens que cresce a cada passo de raciocínio (COT)
+        val historico = mutableListOf(
+            CompletionMessage(role = "system", content = systemPrompt),
+            CompletionMessage(role = "user", content = userPrompt)
         )
 
-        val call = api.completion(request)
-        currentCall = call
-
         try {
-            val response = call.execute()
-            if (!response.isSuccessful) {
-                val errorBody = errorParser<ErrorResponse>(response.errorBody()?.string() ?: "")
-                throw RuntimeException(
-                    """Erro durante a gera��o do completion.
-                Status: ${response.raw().code}
-                Motivo: ${errorBody?.error?.message}
-                """.trimIndent()
-                )
+            repeat(MAX_COT_ITERACOES) { iteracao ->
+                val call = api.completion(CompletionRequest(model = model, messages = historico))
+                currentCall = call
+
+                val response = call.execute()
+                if (!response.isSuccessful) {
+                    val errorBody = errorParser<ErrorResponse>(response.errorBody()?.string() ?: "")
+                    throw RuntimeException(
+                        """Erro durante a geração do completion.
+                        Status: ${response.raw().code}
+                        Motivo: ${errorBody?.error?.message}
+                        """.trimIndent()
+                    )
+                }
+
+                val mensagem = response.body()!!.choices[0].message
+
+                // Modelo respondeu com conteúdo: retorna imediatamente
+                if (mensagem.content.isNotBlank()) {
+                    return mensagem.content
+                }
+
+                // Content vazio: passo de raciocínio (COT) de modelo de reasoning.
+                // Inclui o reasoning no histórico como mensagem do assistente e itera novamente.
+                val reasoning = mensagem.reasoning
+                if (reasoning.isNullOrBlank()) {
+                    throw RuntimeException(
+                        "Modelo retornou resposta vazia sem raciocínio na iteração ${iteracao + 1}."
+                    )
+                }
+
+                historico.add(CompletionMessage(role = "assistant", content = reasoning))
             }
 
-            val completionResponse = response.body()!!
-            return completionResponse.choices[0].message.content
+            throw RuntimeException(
+                "Modelo não retornou conteúdo após $MAX_COT_ITERACOES iterações de raciocínio (COT)."
+            )
         } finally {
             currentCall = null
         }
