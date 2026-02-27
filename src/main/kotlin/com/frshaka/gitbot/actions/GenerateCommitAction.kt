@@ -123,8 +123,7 @@ class GenerateCommitAction : AnAction() {
             true
         ) {
             override fun run(indicator: ProgressIndicator) {
-                val client = OpenRouterClient(apiKey, model)
-                val call = client.newCall(systemPrompt, userPrompt)
+                val client = OpenRouterClient(apiKey)
 
                 try {
                     indicator.text = "GitBot Commit"
@@ -132,14 +131,14 @@ class GenerateCommitAction : AnAction() {
                     indicator.isIndeterminate = true
 
                     if (indicator.isCanceled) {
-                        call.cancel()
+                        client.cancel()
                         return
                     }
 
                     val commitText = try {
-                        client.execute(call).trim()
+                        client.completion(model, systemPrompt, userPrompt)
                     } catch (ex: Exception) {
-                        if (call.isCanceled()) return
+                        if (client.isCanceled()) return
 
                         ApplicationManager.getApplication().invokeLater {
                             Messages.showErrorDialog(
@@ -152,7 +151,7 @@ class GenerateCommitAction : AnAction() {
                     }
 
                     if (indicator.isCanceled) {
-                        call.cancel()
+                        client.cancel()
                         return
                     }
 
@@ -163,7 +162,7 @@ class GenerateCommitAction : AnAction() {
                     }
                 } finally {
                     if (indicator.isCanceled) {
-                        call.cancel()
+                        client.cancel()
                     }
                     isRunning.set(false)
                 }
