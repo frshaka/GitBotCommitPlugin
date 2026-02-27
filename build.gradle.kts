@@ -90,7 +90,7 @@ intellijPlatform {
 
     publishing {
         // Token do Marketplace (criado no perfil do JetBrains Marketplace)
-        // Melhor pr�tica: injetar por vari�vel de ambiente/Gradle property, n�o hardcode.
+        // Melhor pratica: injetar por variavel de ambiente/Gradle property, nao hardcode.
         token.set(
             providers.environmentVariable("JB_MARKETPLACE_TOKEN")
                 .orElse(providers.gradleProperty("jbMarketplaceToken"))
@@ -102,12 +102,12 @@ intellijPlatform {
         // Se quiser soltar beta/alpha primeiro, troca para:
         // channels.set(listOf("alpha"))
 
-        // Opcional: publicar como hidden (n�o aparece publicamente ap�s aprova��o).
+        // Opcional: publicar como hidden (nao aparece publicamente apos aprovacao).
         // hidden.set(true)
     }
 
-    // Assinatura � opcional aqui.
-    // Se voc� for assinar depois, a pr�pria doc do plugin mostra as op��es suportadas.
+    // Assinatura e opcional aqui.
+    // Se voce for assinar depois, a pr�pria doc do plugin mostra as opcoes suportadas.
     // signing { ... }
 }
 tasks {
