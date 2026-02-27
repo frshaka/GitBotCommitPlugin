@@ -6,7 +6,6 @@ import com.frshaka.gitbot.ai.dto.CompletionResponse
 import com.frshaka.gitbot.ai.dto.ErrorResponse
 import com.frshaka.gitbot.ai.dto.Model
 import com.frshaka.gitbot.ai.dto.ModelResponse
-import com.jetbrains.fus.reporting.serialization.toJsonElement
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.Interceptor
