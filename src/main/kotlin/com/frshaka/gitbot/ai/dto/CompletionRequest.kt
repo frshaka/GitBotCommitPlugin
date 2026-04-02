@@ -4,7 +4,7 @@ import com.squareup.moshi.Json
 
 data class CompletionRequest(
 
-    val messages: List<CompletionMessage> = listOf(),
+    val messages: List<CompletionMessageRequisicao> = listOf(),
     val model: String,
     @Json(name = "max_tokens")
     val maxTokens: Int = 300,

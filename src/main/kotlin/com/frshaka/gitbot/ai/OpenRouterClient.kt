@@ -1,6 +1,6 @@
 package com.frshaka.gitbot.ai
 
-import com.frshaka.gitbot.ai.dto.CompletionMessage
+import com.frshaka.gitbot.ai.dto.CompletionMessageRequisicao
 import com.frshaka.gitbot.ai.dto.CompletionRequest
 import com.frshaka.gitbot.ai.dto.CompletionResponse
 import com.frshaka.gitbot.ai.dto.ErrorResponse
@@ -36,8 +36,8 @@ class OpenRouterClient(
     fun completion(model: String, systemPrompt: String, userPrompt: String): String {
         // Histórico de mensagens que cresce a cada passo de raciocínio (COT)
         val historico = mutableListOf(
-            CompletionMessage(role = "system", content = systemPrompt),
-            CompletionMessage(role = "user", content = userPrompt)
+            CompletionMessageRequisicao(role = "system", content = systemPrompt),
+            CompletionMessageRequisicao(role = "user", content = userPrompt)
         )
 
         try {
@@ -72,7 +72,8 @@ class OpenRouterClient(
                     )
                 }
 
-                historico.add(CompletionMessage(role = "assistant", content = reasoning))
+                historico.add(CompletionMessageRequisicao(role = "assistant", content = reasoning))
+                historico.add(CompletionMessageRequisicao(role = "user", content = "Continue com sua resposta final."))
             }
 
             throw RuntimeException(

@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.frshaka"
-version = "1.0.3"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
@@ -39,42 +39,19 @@ intellijPlatform {
             <h2>Bug Fixes</h2>
             <ul>
                 <li>
-                    <b>API Key no longer lost after restarting the IDE.</b><br/>
-                    The credential lookup key was inconsistent between save and load operations.
-                    On certain backends (Windows Credential Manager, KWallet, SecretService),
-                    this mismatch caused the stored key to be undetectable on the next startup,
-                    making the API Key appear to have been erased. Both operations now use the
-                    same key, ensuring credentials are always found correctly.
+                    <b>Fixed 400 error when generating commits with any OpenRouter model.</b><br/>
+                    The <code>reasoning</code> field from the response DTO was being serialized as
+                    <code>"reasoning": null</code> in every outgoing request message. Providers such as
+                    Anthropic reject unknown fields with a 400 status. Request and response message DTOs
+                    are now separate, so no extra fields are sent to the API.
                 </li>
                 <li>
-                    <b>Settings screen no longer freezes on first install.</b><br/>
-                    The model list was loaded synchronously on the UI thread during class initialization,
-                    causing an infinite loading state whenever the Settings page was opened without a
-                    previously configured API Key. The network call is now performed asynchronously in a
-                    background thread and never blocks the UI.
-                </li>
-                <li>
-                    <b>Model field is now editable.</b><br/>
-                    The model combo box was read-only, making it impossible to enter a model ID manually
-                    when the list had not yet been loaded (e.g. on first install). The field now accepts
-                    free text input at any time.
-                </li>
-            </ul>
-            <h2>Improvements</h2>
-            <ul>
-                <li>
-                    <b>Warning shown when system keyring is unavailable.</b><br/>
-                    If IntelliJ's password safe is running in memory-only mode (e.g. KWallet or
-                    Windows Credential Manager not accessible), a warning is now displayed in the
-                    Settings page informing the user that the API Key will not be persisted between
-                    IDE sessions, along with step-by-step instructions to fix the issue on Windows,
-                    Linux and macOS. The message respects the language configured in the plugin (PT-BR or EN).
-                </li>
-                <li>
-                    <b>New "Load Models" button in Settings.</b><br/>
-                    A dedicated button next to the model field lets you fetch the full list of available
-                    OpenRouter models on demand, after entering your API Key. If a key is already saved,
-                    models are loaded automatically in the background when the Settings page is opened.
+                    <b>Fixed infinite 400 loop with Chain-of-Thought reasoning models.</b><br/>
+                    When a reasoning model returned only a reasoning step without a final answer, the
+                    plugin added it as an assistant message and retried. The resulting conversation ended
+                    with an assistant turn, which is invalid for OpenAI-compatible APIs and caused a 400
+                    on the next iteration. A user continuation message is now appended after each
+                    reasoning step, keeping the conversation structure valid.
                 </li>
             </ul>
         """.trimIndent()

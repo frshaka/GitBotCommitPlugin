@@ -7,6 +7,6 @@ data class CompletionMessage(
 
     // Presente apenas nas respostas de modelos de raciocínio (ex: DeepSeek-R1, QwQ).
     // Contém o Chain-of-Thought interno do modelo quando content ainda está vazio.
-    // Ignorado na serialização quando nulo, portanto não é enviado nas requisições.
+    // Este DTO é usado apenas para desserializar respostas. Para requisições, use CompletionMessageRequisicao.
     val reasoning: String? = null
 )
