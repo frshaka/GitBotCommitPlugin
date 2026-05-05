@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.frshaka"
-version = "1.1.0"
+version = "1.0.6"
 
 repositories {
     mavenCentral()
@@ -36,7 +36,7 @@ intellijPlatform {
             sinceBuild = "252.25557"
         }
         changeNotes = """
-            <h2>1.1.0 — Multi-provider support</h2>
+            <h2>1.0.6 — Multi-provider support</h2>
             <ul>
                 <li>
                     <b>New provider: Ollama (local).</b> Run commit generation 100% offline against models

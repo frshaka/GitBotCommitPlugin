@@ -199,6 +199,23 @@ MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
+## Release Notes
+
+### 1.0.6 — Multi-provider support
+
+- **New provider: Ollama (local).** Run commit generation 100% offline against models pulled with `ollama pull`. Requires Ollama 0.1.27+ for OpenAI-compatible `/v1/chat/completions` support.
+- **Provider selector in Settings.** Switch between **OpenRouter** (cloud) and **Ollama** (local). The settings panel was migrated to the modern Kotlin UI DSL, showing only the relevant fields per provider.
+- **Test Connection for Ollama.** Verifies the server is reachable and reports the number of installed models in one click.
+- **User-friendly error handling.** Distinct messages for unreachable providers, invalid API key, missing model (with `ollama pull` hint), and rate limits.
+- **Per-provider model memory.** Switching providers preserves the previously selected model on each side, so you don't lose your selection.
+
+### 1.0.5 — Bug fixes
+
+- **Fixed 400 error when generating commits with any OpenRouter model.** Request and response message DTOs are now separate, so no extra fields are sent.
+- **Fixed infinite 400 loop with Chain-of-Thought reasoning models.** A user continuation message is now appended after each reasoning step.
+
+---
+
 ---
 
 # GitBot Commit — Português do Brasil
@@ -399,3 +416,20 @@ Por padrão, o plugin utiliza o diff completo de todos os arquivos staged. Se qu
 MIT — veja [LICENSE](LICENSE) para detalhes.
 
 **Código-fonte:** [github.com/frshaka/GitBotCommitPlugin](https://github.com/frshaka/GitBotCommitPlugin)
+
+---
+
+## Notas de Versão
+
+### 1.0.6 — Suporte multi-provider
+
+- **Novo provider: Ollama (local).** Gere mensagens de commit 100% offline com modelos baixados via `ollama pull`. Requer Ollama 0.1.27+ para suporte ao endpoint compatível com OpenAI `/v1/chat/completions`.
+- **Seletor de provider nas Configurações.** Alterne entre **OpenRouter** (nuvem) e **Ollama** (local). O painel de configurações foi migrado para o Kotlin UI DSL moderno, exibindo apenas os campos relevantes para cada provider.
+- **Test Connection para Ollama.** Verifica se o servidor está acessível e exibe o número de modelos instalados com um clique.
+- **Tratamento de erros amigável.** Mensagens distintas para provider inacessível, chave de API inválida, modelo ausente (com dica de `ollama pull`) e limite de taxa.
+- **Memória de modelo por provider.** Trocar de provider preserva o modelo selecionado anteriormente em cada lado, sem perder a configuração.
+
+### 1.0.5 — Correções de bugs
+
+- **Corrigido erro 400 ao gerar commits com qualquer modelo do OpenRouter.** Os DTOs de mensagem de requisição e resposta agora são separados, eliminando campos extras nas requisições.
+- **Corrigido loop infinito de erro 400 com modelos de raciocínio Chain-of-Thought.** Uma mensagem de continuação do usuário é adicionada após cada etapa de raciocínio.

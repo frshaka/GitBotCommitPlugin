@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./gradlew compileKotlin)"
+      "Bash(./gradlew compileKotlin)",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\" -Directory | Where-Object { $_.Name -match \"java|jdk|jre|corretto|adoptium|temurin|graal|zulu|microsoft\" -and $_.Name -notmatch \"^$\" } | Select-Object FullName)",
+      "PowerShell(java *)"
     ]
   }
 }
