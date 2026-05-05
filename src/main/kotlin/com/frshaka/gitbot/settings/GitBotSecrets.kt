@@ -6,28 +6,38 @@ import com.intellij.ide.passwordSafe.PasswordSafe
 
 object GitBotSecrets {
 
-    private const val SERVICE_NAME = "com.frshaka.gitbot.openrouter"
-
-    // Nome de usuário fixo incluído tanto no get quanto no set para garantir
-    // que a chave de lookup seja idêntica nos dois casos.
-    // Sem isso, alguns backends (ex: Windows Credential Manager, KWallet)
-    // não encontram a credencial gravada, fazendo a API key "sumir" ao reiniciar a IDE.
-    private const val USER_NAME = "openrouter"
-
-    private fun attributes() = CredentialAttributes(SERVICE_NAME, USER_NAME)
+    private const val SERVICE_PREFIX = "com.frshaka.gitbot"
+    private const val OPENROUTER_KEY = "openrouter"
 
     /**
-     * Retorna true se o PasswordSafe está operando apenas em memória,
-     * ou seja, as credenciais NÃO são persistidas entre sessões da IDE.
-     * Isso ocorre quando o keyring do sistema não está disponível.
+     * Constrói os atributos de credencial para um provider.
+     *
+     * IMPORTANTE: para OpenRouter, esta função produz exatamente
+     * service="com.frshaka.gitbot.openrouter" + user="openrouter",
+     * preservando as credenciais salvas em versões anteriores do plugin.
      */
+    private fun attributesFor(providerKey: String) =
+        CredentialAttributes("$SERVICE_PREFIX.$providerKey", providerKey)
+
     fun isMemoryOnly(): Boolean = PasswordSafe.instance.isMemoryOnly
 
-    fun getApiKey(): String? {
-        return PasswordSafe.instance.get(attributes())?.getPasswordAsString()
+    fun getOpenRouterApiKey(): String? =
+        PasswordSafe.instance.get(attributesFor(OPENROUTER_KEY))?.getPasswordAsString()
+
+    fun setOpenRouterApiKey(apiKey: String) {
+        PasswordSafe.instance.set(
+            attributesFor(OPENROUTER_KEY),
+            Credentials(OPENROUTER_KEY, apiKey)
+        )
     }
 
-    fun setApiKey(apiKey: String) {
-        PasswordSafe.instance.set(attributes(), Credentials(USER_NAME, apiKey))
-    }
+    /**
+     * Compatibilidade com chamadas existentes que ainda usavam getApiKey/setApiKey.
+     * Encaminha para a credencial do OpenRouter.
+     */
+    @Deprecated("Use getOpenRouterApiKey()", ReplaceWith("getOpenRouterApiKey()"))
+    fun getApiKey(): String? = getOpenRouterApiKey()
+
+    @Deprecated("Use setOpenRouterApiKey(apiKey)", ReplaceWith("setOpenRouterApiKey(apiKey)"))
+    fun setApiKey(apiKey: String) = setOpenRouterApiKey(apiKey)
 }
