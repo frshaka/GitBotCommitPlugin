@@ -1,40 +1,44 @@
-package com.frshaka.gitbot.ai
+package com.frshaka.gitbot.ai.ollama
 
 import com.frshaka.gitbot.ai.dto.CompletionMessageRequisicao
 import com.frshaka.gitbot.ai.dto.CompletionRequest
-import com.frshaka.gitbot.ai.dto.CompletionResponse
-import com.frshaka.gitbot.ai.dto.ErrorResponse
-import com.frshaka.gitbot.ai.dto.Model
-import com.frshaka.gitbot.ai.dto.ModelResponse
+import com.frshaka.gitbot.ai.ollama.dto.OllamaTag
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
-class OpenRouterClient(
-    private val apiKey: String,
+class OllamaClient(
+    rawBaseUrl: String,
 ) {
-    private val baseUrl: String = "https://openrouter.ai/"
+    private val baseUrl: String = normalizeBaseUrl(rawBaseUrl)
+
     private val moshi: Moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
         .build()
+
     private val api by lazy { retrofitClient() }
 
     @Volatile
     private var currentCall: Call<*>? = null
 
     companion object {
-        // Limite de iterações do loop COT para evitar ciclo infinito em modelos de raciocínio
         private const val MAX_COT_ITERACOES = 8
+
+        private fun normalizeBaseUrl(url: String): String {
+            val trimmed = url.trim()
+            require(trimmed.isNotEmpty()) { "Ollama base URL cannot be empty" }
+            require(trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                "Ollama base URL must start with http:// or https://"
+            }
+            return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+        }
     }
 
     fun completion(model: String, systemPrompt: String, userPrompt: String): String {
-        // Histórico de mensagens que cresce a cada passo de raciocínio (COT)
         val historico = mutableListOf(
             CompletionMessageRequisicao(role = "system", content = systemPrompt),
             CompletionMessageRequisicao(role = "user", content = userPrompt)
@@ -47,24 +51,25 @@ class OpenRouterClient(
 
                 val response = call.execute()
                 if (!response.isSuccessful) {
-                    val errorBody = errorParser<ErrorResponse>(response.errorBody()?.string() ?: "")
+                    val errorBody = response.errorBody()?.string().orEmpty()
                     throw RuntimeException(
-                        """Erro durante a geração do completion.
+                        """Erro durante a geração do completion (Ollama).
                         Status: ${response.raw().code}
-                        Motivo: ${errorBody?.error?.message}
+                        Motivo: $errorBody
                         """.trimIndent()
                     )
                 }
 
-                val mensagem = response.body()!!.choices[0].message
+                val body = response.body()
+                    ?: throw RuntimeException("Ollama retornou resposta vazia.")
 
-                // Modelo respondeu com conteúdo: retorna imediatamente
+                val mensagem = body.choices.firstOrNull()?.message
+                    ?: throw RuntimeException("Ollama retornou sem choices.")
+
                 if (mensagem.content.isNotBlank()) {
                     return mensagem.content
                 }
 
-                // Content vazio: passo de raciocínio (COT) de modelo de reasoning.
-                // Inclui o reasoning no histórico como mensagem do assistente e itera novamente.
                 val reasoning = mensagem.reasoning
                 if (reasoning.isNullOrBlank()) {
                     throw RuntimeException(
@@ -84,54 +89,39 @@ class OpenRouterClient(
         }
     }
 
-    fun models(): List<Model> {
-        val call = api.models()
+    fun tags(): List<OllamaTag> {
+        val call = api.tags()
         currentCall = call
 
         try {
             val response = call.execute()
             if (!response.isSuccessful) {
-                val errorBody = errorParser<ErrorResponse>(response.errorBody()?.string() ?: "")
-                throw RuntimeException("""Erro durante a busca de modelos.
-                Status: ${response.raw().code}
-                Motivo: ${errorBody?.error?.message}
-                """.trimIndent())
+                throw RuntimeException(
+                    "Erro ao listar modelos do Ollama. Status: ${response.raw().code}"
+                )
             }
-
-            val modelsResponse = response.body()!!
-            return modelsResponse.models
+            return response.body()?.models.orEmpty()
         } finally {
             currentCall = null
         }
     }
 
-    fun cancel() = currentCall?.cancel()
+    fun cancel() {
+        currentCall?.cancel()
+    }
 
-    fun isCanceled() = currentCall?.isCanceled ?: false
+    fun isCanceled(): Boolean = currentCall?.isCanceled ?: false
 
     private fun okHttpClient() = OkHttpClient().newBuilder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(Interceptor { chain ->
-            val request: Request = chain.request()
-                .newBuilder()
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer $apiKey")
-                .build()
-            chain.proceed(request)
-        })
+        .build()
 
     private fun retrofitClient() = Retrofit.Builder()
         .baseUrl(baseUrl)
-        .client(okHttpClient().build())
+        .client(okHttpClient())
         .addConverterFactory(MoshiConverterFactory.create(moshi).asLenient())
         .build()
-        .create(OpenRouterAPI::class.java)
-
-
-    inline private fun <reified T : Any> errorParser(json: String): T? {
-        val adapter = moshi.adapter(T::class.java)
-        return adapter.fromJson(json)
-    }
+        .create(OllamaAPI::class.java)
 }

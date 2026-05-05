@@ -8,5 +8,6 @@ data class CompletionRequest(
     val model: String,
     @Json(name = "max_tokens")
     val maxTokens: Int = 300,
-    val temperature: Double = 0.0
+    val temperature: Double = 0.0,
+    val stream: Boolean = false
 )

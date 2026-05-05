@@ -10,8 +10,9 @@
         <b>GitBot Commit</b> generates AI-powered commit messages directly from your staged changes,
         integrated into IntelliJ IDEA's native Git Commit workflow.<br/><br/>
 
-        It reads your <code>git diff --cached</code>, sends it to an AI model via
-        <a href="https://openrouter.ai">OpenRouter</a>, and writes a structured message following the
+        It reads your <code>git diff --cached</code>, sends it to an AI model via your chosen
+        provider — <a href="https://openrouter.ai">OpenRouter</a> (cloud) or
+        <a href="https://ollama.com">Ollama</a> (local) — and writes a structured message following the
         <b>Conventional Commits</b> standard with emojis.<br/><br/>
 
         <hr/>
@@ -19,9 +20,10 @@
         <b>Features</b>
         <ul>
             <li>Generates commit messages from staged changes (<code>git diff --cached</code>)</li>
+            <li>Multi-provider: <b>OpenRouter</b> (cloud) or <b>Ollama</b> (local, offline)</li>
             <li>Conventional Commits style: <code>feat</code>, <code>fix</code>, <code>refactor</code>, <code>docs</code>, <code>chore</code>, <code>test</code>, <code>style</code></li>
             <li>Output language: <b>English</b> or <b>Brazilian Portuguese</b></li>
-            <li>Compatible with any model available on OpenRouter</li>
+            <li>Compatible with any model on OpenRouter or any model pulled in Ollama</li>
             <li>Fully customizable prompt templates, with one-click reset to defaults</li>
             <li>Preview dialog with Edit and Copy options before applying</li>
             <li>Runs in background with progress indicator and cancellation support</li>
@@ -31,21 +33,35 @@
 
         <b>Requirements</b>
         <ul>
-            <li>IntelliJ IDEA 2022.1 or later, with Git enabled</li>
-            <li>An <a href="https://openrouter.ai">OpenRouter</a> API key</li>
+            <li>IntelliJ IDEA 2025.2 or later, with Git enabled</li>
+            <li>One of:
+                <ul>
+                    <li>An <a href="https://openrouter.ai">OpenRouter</a> API key, or</li>
+                    <li><a href="https://ollama.com">Ollama</a> 0.1.27+ running locally with at least one model pulled (e.g. <code>ollama pull llama3.2</code>)</li>
+                </ul>
+            </li>
             <li>At least one staged change (<code>git add</code>) before running the plugin</li>
         </ul>
 
         <hr/>
 
-        <b>Setup (one time)</b><br/><br/>
+        <b>Setup — OpenRouter (cloud)</b><br/><br/>
 
         <b>1.</b> Go to <b>Settings &#8594; GitBot Commit</b><br/>
-        <b>2.</b> Paste your <b>OpenRouter API Key</b><br/>
-        <b>3.</b> Enter the <b>Model</b> ID you want to use (default: <code>anthropic/claude-3.5-sonnet</code>)<br/>
-        &nbsp;&nbsp;&nbsp;&nbsp;Browse available models at <a href="https://openrouter.ai/models">openrouter.ai/models</a><br/>
-        <b>4.</b> Choose the <b>Commit language</b>: <code>EN</code> or <code>PT_BR</code><br/>
-        <b>5.</b> Optionally edit the <b>Prompt Template</b> — or click <i>Reset to default</i> to restore it<br/>
+        <b>2.</b> Provider: <b>OpenRouter</b><br/>
+        <b>3.</b> Paste your <b>OpenRouter API Key</b> and click <b>Load Models</b><br/>
+        <b>4.</b> Pick a model (default: <code>anthropic/claude-3.5-sonnet</code>) — or browse <a href="https://openrouter.ai/models">openrouter.ai/models</a><br/>
+        <b>5.</b> Choose the <b>Commit language</b>: <code>EN</code> or <code>PT_BR</code><br/>
+        <b>6.</b> Optionally edit the <b>Prompt Template</b> — or click <i>Reset to default</i><br/>
+        <b>7.</b> Click <b>Apply</b><br/><br/>
+
+        <b>Setup — Ollama (local)</b><br/><br/>
+
+        <b>1.</b> Install Ollama: <a href="https://ollama.com">ollama.com</a> and start the service (<code>ollama serve</code>)<br/>
+        <b>2.</b> Pull a model: <code>ollama pull llama3.2</code><br/>
+        <b>3.</b> In <b>Settings &#8594; GitBot Commit</b> set Provider to <b>Ollama</b><br/>
+        <b>4.</b> Confirm the <b>Server URL</b> (default: <code>http://localhost:11434</code>) and click <b>Test Connection</b><br/>
+        <b>5.</b> Click <b>Load Models</b> and pick one of your local models<br/>
         <b>6.</b> Click <b>Apply</b><br/><br/>
 
         <hr/>
@@ -79,6 +95,8 @@
             <li><i>"No staged changes found"</i> — run <code>git add</code> before using the plugin</li>
             <li><i>"Configure your OpenRouter API key"</i> — go to Settings &#8594; GitBot Commit</li>
             <li><i>OpenRouter error</i> — check your API key, account credits, and model ID</li>
+            <li><i>"Cannot reach Ollama"</i> — start Ollama (<code>ollama serve</code>), verify the URL in Settings, or use Test Connection</li>
+            <li><i>Model 'X' not found</i> (Ollama) — pull it first: <code>ollama pull X</code></li>
             <li><i>Message not applied</i> — as a fallback, the message is copied to your clipboard</li>
         </ul>
 
@@ -95,7 +113,7 @@
         <action id="com.frshaka.gitbot.GenerateCommitAction"
                 class="com.frshaka.gitbot.actions.GenerateCommitAction"
                 text="AI Commit"
-                description="Generate commit message from staged changes using OpenRouter"
+                description="Generate commit message from staged changes using OpenRouter or Ollama"
                 icon="AllIcons.Actions.Lightning">
             <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
         </action>

@@ -1,4 +1,4 @@
-package com.frshaka.gitbot.ai
+package com.frshaka.gitbot.ai.openrouter
 
 import com.frshaka.gitbot.ai.dto.CompletionRequest
 import com.frshaka.gitbot.ai.dto.CompletionResponse

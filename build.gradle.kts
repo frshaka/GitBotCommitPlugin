@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.frshaka"
-version = "1.0.5"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -36,22 +36,40 @@ intellijPlatform {
             sinceBuild = "252.25557"
         }
         changeNotes = """
-            <h2>Bug Fixes</h2>
+            <h2>1.1.0 — Multi-provider support</h2>
             <ul>
                 <li>
-                    <b>Fixed 400 error when generating commits with any OpenRouter model.</b><br/>
-                    The <code>reasoning</code> field from the response DTO was being serialized as
-                    <code>"reasoning": null</code> in every outgoing request message. Providers such as
-                    Anthropic reject unknown fields with a 400 status. Request and response message DTOs
-                    are now separate, so no extra fields are sent to the API.
+                    <b>New provider: Ollama (local).</b> Run commit generation 100% offline against models
+                    pulled with <code>ollama pull</code>. Requires Ollama 0.1.27+ for OpenAI-compatible
+                    <code>/v1/chat/completions</code> support.
                 </li>
                 <li>
-                    <b>Fixed infinite 400 loop with Chain-of-Thought reasoning models.</b><br/>
-                    When a reasoning model returned only a reasoning step without a final answer, the
-                    plugin added it as an assistant message and retried. The resulting conversation ended
-                    with an assistant turn, which is invalid for OpenAI-compatible APIs and caused a 400
-                    on the next iteration. A user continuation message is now appended after each
-                    reasoning step, keeping the conversation structure valid.
+                    <b>Provider selector in Settings.</b> Switch between <b>OpenRouter</b> (cloud) and
+                    <b>Ollama</b> (local). The settings panel was migrated to the modern Kotlin UI DSL,
+                    showing only the relevant fields per provider.
+                </li>
+                <li>
+                    <b>Test Connection for Ollama.</b> Verifies the server is reachable and reports the
+                    number of installed models in one click.
+                </li>
+                <li>
+                    <b>User-friendly error handling.</b> Distinct messages for unreachable providers,
+                    invalid API key, missing model (with <code>ollama pull</code> hint), and rate limits.
+                </li>
+                <li>
+                    <b>Per-provider model memory.</b> Switching providers preserves the previously
+                    selected model on each side, so you don't lose your selection.
+                </li>
+            </ul>
+            <h2>1.0.5 — Bug fixes</h2>
+            <ul>
+                <li>
+                    <b>Fixed 400 error when generating commits with any OpenRouter model.</b>
+                    Request and response message DTOs are now separate, so no extra fields are sent.
+                </li>
+                <li>
+                    <b>Fixed infinite 400 loop with Chain-of-Thought reasoning models.</b>
+                    A user continuation message is now appended after each reasoning step.
                 </li>
             </ul>
         """.trimIndent()

@@ -1,29 +1,54 @@
 package com.frshaka.gitbot.settings
 
-import com.frshaka.gitbot.ai.OpenRouterClient
+import com.frshaka.gitbot.ai.LLMProviderFactory
+import com.frshaka.gitbot.ai.ProviderHealth
+import com.frshaka.gitbot.ai.ProviderType
 import com.frshaka.gitbot.prompt.PromptLoader
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.observable.properties.AtomicProperty
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.ComboBox
-import com.intellij.ui.components.JBLabel
+import com.intellij.openapi.ui.DialogPanel
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
-import java.awt.BorderLayout
-import java.awt.GridBagConstraints
-import java.awt.GridBagLayout
-import java.awt.Insets
-import javax.swing.*
+import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.AlignY
+import com.intellij.ui.dsl.builder.RightGap
+import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.layout.ComponentPredicate
+import java.awt.Color
+import java.awt.Dimension
+import javax.swing.BorderFactory
+import javax.swing.DefaultListModel
+import javax.swing.JButton
+import javax.swing.JComponent
+import javax.swing.JLabel
+import javax.swing.JPanel
+import javax.swing.JPasswordField
+import javax.swing.JTextArea
+import javax.swing.JTextField
+import javax.swing.ListSelectionModel
+import javax.swing.ScrollPaneConstants
+import javax.swing.SwingUtilities
 
 class GitBotConfigurable : Configurable {
 
-    private var panel: JPanel? = null
+    private val settings get() = GitBotSettingsService.getInstance().state
+
+    private val providerProperty = AtomicProperty(ProviderType.fromName(settings.provider))
+
+    private fun providerIs(target: ProviderType): ComponentPredicate = object : ComponentPredicate() {
+        override fun invoke(): Boolean = providerProperty.get() == target
+        override fun addListener(listener: (Boolean) -> Unit) {
+            providerProperty.afterChange { listener(it == target) }
+        }
+    }
 
     private val apiKeyField = JPasswordField()
+    private val ollamaUrlField = JTextField()
 
-    // Lista mutável de modelos disponíveis; começa vazia e é preenchida de forma assíncrona
     private val availableModels = mutableListOf<String>()
-
-    // Campo editável: usuário pode digitar o ID do modelo manualmente caso a lista ainda não tenha carregado
     private val modelField = ComboBox<String>().apply { isEditable = true }
 
     private val languageCombo = ComboBox(arrayOf("PT_BR", "EN"))
@@ -33,252 +58,266 @@ class GitBotConfigurable : Configurable {
         wrapStyleWord = true
     }
 
-    private val resetButton = JButton("Reset to default")
-
-    // Botão para carregar a lista de modelos do OpenRouter de forma assíncrona
+    private val resetPromptButton = JButton("Reset to default")
     private val loadModelsButton = JButton("Load Models")
+    private val testConnectionButton = JButton("Test Connection")
+
+    private var dialogPanel: DialogPanel? = null
 
     override fun getDisplayName(): String = "GitBot Commit"
 
     override fun createComponent(): JComponent {
-        val root = JPanel(BorderLayout())
-        val form = JPanel(GridBagLayout())
+        configureModelField()
 
-        // Aviso exibido quando o PasswordSafe está em modo memória (keyring do sistema indisponível).
-        // Nesse caso a API key não é persistida entre sessões da IDE.
-        // O texto é exibido no idioma configurado no plugin.
-        if (GitBotSecrets.isMemoryOnly()) {
-            val lang = GitBotSettingsService.getInstance().state.language
-            val warningText = if (lang == "PT_BR") {
-                "<html>" +
-                "<b>⚠ Atenção: a API Key não será salva entre sessões da IDE.</b><br/><br/>" +
-                "O cofre de senhas do IntelliJ está operando apenas em memória porque o " +
-                "gerenciador de credenciais do sistema não está disponível.<br/><br/>" +
-                "<b>Como corrigir:</b><br/>" +
-                "• <b>Windows:</b> verifique se o <i>Windows Credential Manager</i> está ativo " +
-                "(<i>Painel de Controle → Gerenciador de Credenciais</i>).<br/>" +
-                "• <b>Linux:</b> instale e inicie o <i>KWallet</i> ou <i>GNOME Keyring (SecretService)</i> " +
-                "e certifique-se de que o daemon está em execução antes de abrir o IntelliJ.<br/>" +
-                "• <b>macOS:</b> verifique se o <i>Keychain Access</i> está desbloqueado.<br/><br/>" +
-                "Após corrigir, reinicie o IntelliJ e reconfigure a API Key." +
-                "</html>"
-            } else {
-                "<html>" +
-                "<b>⚠ Warning: your API Key will not be saved between IDE sessions.</b><br/><br/>" +
-                "IntelliJ's password safe is running in memory-only mode because the system " +
-                "credential manager is not available.<br/><br/>" +
-                "<b>How to fix:</b><br/>" +
-                "• <b>Windows:</b> make sure <i>Windows Credential Manager</i> is enabled " +
-                "(<i>Control Panel → Credential Manager</i>).<br/>" +
-                "• <b>Linux:</b> install and start <i>KWallet</i> or <i>GNOME Keyring (SecretService)</i> " +
-                "and ensure the daemon is running before launching IntelliJ.<br/>" +
-                "• <b>macOS:</b> make sure <i>Keychain Access</i> is unlocked.<br/><br/>" +
-                "After fixing, restart IntelliJ and re-enter your API Key." +
-                "</html>"
+        val pwdWarning = buildMemoryOnlyWarning()
+
+        val panel = panel {
+            if (pwdWarning != null) {
+                row {
+                    cell(pwdWarning).align(AlignX.FILL)
+                }.visibleIf(providerIs(ProviderType.OPENROUTER))
             }
-            val warning = JLabel(warningText).apply {
-                foreground = java.awt.Color(180, 80, 0)
-                border = BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(java.awt.Color(200, 120, 0)),
-                    BorderFactory.createEmptyBorder(8, 10, 8, 10)
-                )
+
+            row("Provider:") {
+                comboBox(ProviderType.entries.toList())
+                    .applyToComponent {
+                        renderer = javax.swing.DefaultListCellRenderer().also { it.horizontalAlignment = JLabel.LEFT }
+                        setRenderer { list, value, index, selected, focused ->
+                            val text = (value as? ProviderType)?.displayName ?: ""
+                            javax.swing.DefaultListCellRenderer().getListCellRendererComponent(list, text, index, selected, focused)
+                        }
+                        selectedItem = providerProperty.get()
+                        addActionListener {
+                            val newProvider = selectedItem as ProviderType
+                            onProviderSwitch(newProvider)
+                        }
+                    }
             }
-            root.add(warning, BorderLayout.NORTH)
+
+            row("OpenRouter API Key:") {
+                cell(apiKeyField).align(AlignX.FILL)
+            }.visibleIf(providerIs(ProviderType.OPENROUTER))
+
+            row("Server URL:") {
+                cell(ollamaUrlField).align(AlignX.FILL)
+            }.visibleIf(providerIs(ProviderType.OLLAMA))
+
+            row("") {
+                cell(testConnectionButton)
+            }.visibleIf(providerIs(ProviderType.OLLAMA))
+
+            row("Model:") {
+                cell(modelField).align(AlignX.FILL).resizableColumn().gap(RightGap.SMALL)
+                cell(loadModelsButton)
+            }
+
+            row("Commit language:") {
+                cell(languageCombo)
+            }
+
+            row("Prompt Template:") {
+                cell(buildPromptScroll()).align(AlignX.FILL).align(AlignY.FILL).resizableColumn()
+            }.resizableRow()
+
+            row("") {
+                cell(resetPromptButton)
+            }
         }
 
-        val c = GridBagConstraints().apply {
-            fill = GridBagConstraints.HORIZONTAL
-            insets = Insets(6, 6, 6, 6)
+        attachListeners()
+        dialogPanel = panel
+        reset()
+        return panel
+    }
+
+    private fun buildPromptScroll(): JBScrollPane = JBScrollPane(promptArea).apply {
+        verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+        horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        preferredSize = Dimension(600, 280)
+    }
+
+    private fun buildMemoryOnlyWarning(): JComponent? {
+        if (!GitBotSecrets.isMemoryOnly()) return null
+        val lang = settings.language
+        val text = if (lang == "PT_BR") {
+            "<html>" +
+            "<b>⚠ Atenção: a API Key não será salva entre sessões da IDE.</b><br/><br/>" +
+            "O cofre de senhas do IntelliJ está operando apenas em memória porque o " +
+            "gerenciador de credenciais do sistema não está disponível.<br/><br/>" +
+            "<b>Como corrigir:</b><br/>" +
+            "• <b>Windows:</b> verifique se o <i>Windows Credential Manager</i> está ativo.<br/>" +
+            "• <b>Linux:</b> instale e inicie o <i>KWallet</i> ou <i>GNOME Keyring (SecretService)</i>.<br/>" +
+            "• <b>macOS:</b> verifique se o <i>Keychain Access</i> está desbloqueado." +
+            "</html>"
+        } else {
+            "<html>" +
+            "<b>⚠ Warning: your API Key will not be saved between IDE sessions.</b><br/><br/>" +
+            "IntelliJ's password safe is running in memory-only mode because the system " +
+            "credential manager is not available.<br/><br/>" +
+            "<b>How to fix:</b><br/>" +
+            "• <b>Windows:</b> make sure <i>Windows Credential Manager</i> is enabled.<br/>" +
+            "• <b>Linux:</b> install and start <i>KWallet</i> or <i>GNOME Keyring</i>.<br/>" +
+            "• <b>macOS:</b> make sure <i>Keychain Access</i> is unlocked." +
+            "</html>"
         }
-
-        fun row(y: Int, label: String, comp: JComponent) {
-            c.gridy = y
-
-            c.gridx = 0
-            c.weightx = 0.0
-            form.add(JBLabel(label), c)
-
-            c.gridx = 1
-            c.weightx = 1.0
-            form.add(comp, c)
+        return JLabel(text).apply {
+            foreground = Color(180, 80, 0)
+            border = BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color(200, 120, 0)),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)
+            )
         }
+    }
 
-        row(0, "OpenRouter API Key:", apiKeyField)
-
-        // Linha do modelo: combo + botão "Load Models" lado a lado
-        c.gridy = 1
-        c.gridx = 0
-        c.weightx = 0.0
-        form.add(JBLabel("Model:"), c)
-
-        c.gridx = 1
-        c.weightx = 1.0
-        val modelRow = JPanel(BorderLayout(4, 0)).apply {
-            add(modelField, BorderLayout.CENTER)
-            add(loadModelsButton, BorderLayout.EAST)
-        }
-        form.add(modelRow, c)
-
-        row(2, "Commit language:", languageCombo)
-
-        // Editor de prompt
-        c.gridy = 3
-        c.gridx = 0
-        c.weightx = 0.0
-        c.anchor = GridBagConstraints.NORTHWEST
-        form.add(JBLabel("Prompt Template:"), c)
-
-        c.gridx = 1
-        c.weightx = 1.0
-        c.fill = GridBagConstraints.BOTH
-        val promptScroll = JBScrollPane(promptArea).apply {
-            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
-            horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
-        }
-        form.add(promptScroll, c)
-
-        // Botão de reset abaixo do prompt
-        c.gridy = 4
-        c.gridx = 1
-        c.weightx = 1.0
-        c.fill = GridBagConstraints.NONE
-        c.anchor = GridBagConstraints.WEST
-        form.add(resetButton, c)
-
-        // Listeners
-        resetButton.addActionListener {
+    private fun attachListeners() {
+        resetPromptButton.addActionListener {
             val lang = languageCombo.selectedItem as String
             promptArea.text = loadDefaultPrompt(lang)
         }
 
         languageCombo.addActionListener {
-            // Ao trocar o idioma, exibe o prompt salvo correspondente
-            val settings = GitBotSettingsService.getInstance().state
+            val s = settings
             val lang = languageCombo.selectedItem as String
-            ensureDefaultsLoaded(settings)
-
-            promptArea.text = if (lang == "EN") settings.promptEn else settings.promptPtBr
+            ensureDefaultsLoaded(s)
+            promptArea.text = if (lang == "EN") s.promptEn else s.promptPtBr
         }
 
-        // Carrega modelos assincronamente ao clicar no botão
-        loadModelsButton.addActionListener {
-            loadModelsAsync()
-        }
+        loadModelsButton.addActionListener { loadModelsAsync() }
 
-        // Configura o campo de modelo com popup de busca ao clicar
-        configureModelField()
-        root.add(form, BorderLayout.CENTER)
-
-        panel = root
-        reset()
-        return root
+        testConnectionButton.addActionListener { testOllamaConnection() }
     }
 
+    private fun onProviderSwitch(newProvider: ProviderType) {
+        val current = providerProperty.get()
+        if (current == newProvider) return
+
+        // Persiste o modelo atual no campo correspondente ao provider anterior em memória
+        val currentModelText = (modelField.editor.item as? String)?.trim()
+            ?: (modelField.selectedItem as? String)?.trim().orEmpty()
+
+        when (current) {
+            ProviderType.OPENROUTER -> currentOpenRouterModel = currentModelText
+            ProviderType.OLLAMA -> currentOllamaModel = currentModelText
+        }
+
+        // Limpa lista e popula campo com modelo do novo provider
+        availableModels.clear()
+        modelField.removeAllItems()
+        val nextModel = when (newProvider) {
+            ProviderType.OPENROUTER -> currentOpenRouterModel
+            ProviderType.OLLAMA -> currentOllamaModel
+        }
+        if (nextModel.isNotBlank()) {
+            availableModels += nextModel
+            modelField.addItem(nextModel)
+            modelField.selectedItem = nextModel
+        }
+
+        providerProperty.set(newProvider)
+    }
+
+    private var currentOpenRouterModel: String = ""
+    private var currentOllamaModel: String = ""
+
     override fun isModified(): Boolean {
-        val settings = GitBotSettingsService.getInstance().state
-        ensureDefaultsLoaded(settings)
+        val s = settings
+        ensureDefaultsLoaded(s)
 
-        val savedKey = GitBotSecrets.getApiKey() ?: ""
-
+        val savedKey = GitBotSecrets.getOpenRouterApiKey() ?: ""
         val uiKey = String(apiKeyField.password).trim()
-        val uiModel = (modelField.editor.item as? String)?.trim() ?: (modelField.selectedItem as? String) ?: ""
+        val uiUrl = ollamaUrlField.text.trim()
+        val uiProvider = providerProperty.get().name
+        val uiModel = currentModelText()
         val uiLang = languageCombo.selectedItem as String
         val uiPrompt = promptArea.text
 
-        val currentSavedPrompt = if (uiLang == "EN") settings.promptEn else settings.promptPtBr
+        val savedPrompt = if (uiLang == "EN") s.promptEn else s.promptPtBr
+        val savedModel = if (providerProperty.get() == ProviderType.OPENROUTER) s.model else s.ollamaModel
 
-        return uiKey != savedKey ||
-                uiModel != settings.model ||
-                uiLang != settings.language ||
-                uiPrompt != currentSavedPrompt
+        return uiProvider != s.provider ||
+                uiKey != savedKey ||
+                uiUrl != s.ollamaBaseUrl ||
+                uiModel != savedModel ||
+                uiLang != s.language ||
+                uiPrompt != savedPrompt
     }
 
     override fun apply() {
-        val settings = GitBotSettingsService.getInstance().state
-        ensureDefaultsLoaded(settings)
+        val s = settings
+        ensureDefaultsLoaded(s)
 
+        val uiProvider = providerProperty.get()
         val uiKey = String(apiKeyField.password).trim()
-        val uiModel = (modelField.editor.item as? String)?.trim() ?: (modelField.selectedItem as? String) ?: ""
+        val uiUrl = ollamaUrlField.text.trim().ifEmpty { "http://localhost:11434" }
+        val uiModel = currentModelText()
         val uiLang = languageCombo.selectedItem as String
         val uiPrompt = promptArea.text
 
         if (uiKey.isNotEmpty()) {
-            GitBotSecrets.setApiKey(uiKey)
+            GitBotSecrets.setOpenRouterApiKey(uiKey)
         }
 
-        settings.model = uiModel
-        settings.language = uiLang
-
-        if (uiLang == "EN") {
-            settings.promptEn = uiPrompt
-        } else {
-            settings.promptPtBr = uiPrompt
+        s.provider = uiProvider.name
+        s.ollamaBaseUrl = uiUrl
+        when (uiProvider) {
+            ProviderType.OPENROUTER -> {
+                s.model = uiModel
+                currentOpenRouterModel = uiModel
+            }
+            ProviderType.OLLAMA -> {
+                s.ollamaModel = uiModel
+                currentOllamaModel = uiModel
+            }
         }
+        s.language = uiLang
+        if (uiLang == "EN") s.promptEn = uiPrompt else s.promptPtBr = uiPrompt
     }
 
     override fun reset() {
-        val settings = GitBotSettingsService.getInstance().state
-        ensureDefaultsLoaded(settings)
+        val s = settings
+        ensureDefaultsLoaded(s)
 
-        val savedKey = GitBotSecrets.getApiKey() ?: ""
+        val provider = ProviderType.fromName(s.provider)
+        providerProperty.set(provider)
 
-        apiKeyField.text = savedKey
-        languageCombo.selectedItem = settings.language
-        promptArea.text = if (settings.language == "EN") settings.promptEn else settings.promptPtBr
+        apiKeyField.text = GitBotSecrets.getOpenRouterApiKey() ?: ""
+        ollamaUrlField.text = s.ollamaBaseUrl
+        languageCombo.selectedItem = s.language
+        promptArea.text = if (s.language == "EN") s.promptEn else s.promptPtBr
 
-        // Preenche o modelo salvo no campo editável
-        setModelFieldValue(settings.model)
+        currentOpenRouterModel = s.model
+        currentOllamaModel = s.ollamaModel
 
-        // Se já existe API key salva, carrega a lista de modelos em background automaticamente
-        if (savedKey.isNotEmpty()) {
+        val activeModel = if (provider == ProviderType.OPENROUTER) s.model else s.ollamaModel
+        availableModels.clear()
+        modelField.removeAllItems()
+        if (activeModel.isNotBlank()) {
+            availableModels += activeModel
+            modelField.addItem(activeModel)
+            modelField.selectedItem = activeModel
+        }
+
+        // Auto-load apenas se OpenRouter já tem API key salva (preserva UX antiga)
+        if (provider == ProviderType.OPENROUTER && apiKeyField.password.isNotEmpty()) {
             loadModelsAsync()
         }
     }
 
     override fun disposeUIResources() {
-        panel = null
+        dialogPanel = null
     }
 
-    /**
-     * Define o valor do campo de modelo, garantindo que o item esteja na lista
-     * ou simplesmente define o texto quando a lista ainda não foi carregada.
-     */
-    private fun setModelFieldValue(modelName: String) {
-        if (modelName.isBlank()) return
-        ensureModelInList(modelName)
-        modelField.selectedItem = modelName
-    }
+    private fun currentModelText(): String =
+        (modelField.editor.item as? String)?.trim()
+            ?: (modelField.selectedItem as? String)?.trim()
+            ?: ""
 
-    private fun ensureModelInList(modelName: String) {
-        if (modelName.isBlank()) return
-        if (availableModels.none { it == modelName }) {
-            availableModels += modelName
-            availableModels.sort()
-            // Sincroniza o ComboBox com a lista atualizada sem perder a seleção atual
-            val current = (modelField.editor.item as? String) ?: (modelField.selectedItem as? String)
-            modelField.removeAllItems()
-            availableModels.forEach { modelField.addItem(it) }
-            modelField.selectedItem = current
-        }
-    }
-
-    /**
-     * Busca a lista de modelos do OpenRouter em uma thread de background.
-     * Deve ser chamada após o usuário ter configurado a API key.
-     * Atualiza o ComboBox na EDT ao terminar.
-     */
     private fun loadModelsAsync() {
-        val apiKey = String(apiKeyField.password).trim().ifEmpty {
-            GitBotSecrets.getApiKey() ?: ""
-        }
+        val provider = providerProperty.get()
+        val (validation, fetcher) = buildLoader(provider) ?: return
 
-        if (apiKey.isEmpty()) {
-            JOptionPane.showMessageDialog(
-                panel,
-                "Informe a OpenRouter API Key antes de carregar os modelos.",
-                "API Key ausente",
-                JOptionPane.WARNING_MESSAGE
-            )
+        if (validation != null) {
+            JOptionPane.warn(dialogPanel, validation)
             return
         }
 
@@ -286,59 +325,90 @@ class GitBotConfigurable : Configurable {
         loadModelsButton.text = "Loading..."
 
         ApplicationManager.getApplication().executeOnPooledThread {
-            val models = try {
-                val client = OpenRouterClient(apiKey)
-                client.models().map { it.id }.sorted()
-            } catch (e: Exception) {
-                emptyList()
-            }
-
-            // Atualiza a UI na EDT
+            val result = runCatching { fetcher() }
             SwingUtilities.invokeLater {
                 loadModelsButton.isEnabled = true
                 loadModelsButton.text = "Load Models"
 
-                if (models.isEmpty()) {
-                    JOptionPane.showMessageDialog(
-                        panel,
-                        "Não foi possível carregar os modelos. Verifique a API Key e a conexão.",
-                        "Erro ao carregar modelos",
-                        JOptionPane.ERROR_MESSAGE
-                    )
-                    return@invokeLater
-                }
-
-                // Preserva o modelo atualmente selecionado/digitado
-                val current = (modelField.editor.item as? String)?.trim()
-                    ?: (modelField.selectedItem as? String)?.trim()
-                    ?: ""
-
-                availableModels.clear()
-                availableModels.addAll(models)
-
-                modelField.removeAllItems()
-                availableModels.forEach { modelField.addItem(it) }
-
-                // Reaplica a seleção anterior se ainda válida, caso contrário mantém como texto editável
-                if (current.isNotEmpty()) {
-                    modelField.selectedItem = current
-                    if (modelField.selectedItem != current) {
-                        modelField.editor.item = current
+                result.onSuccess { models ->
+                    if (models.isEmpty()) {
+                        JOptionPane.warn(dialogPanel, "Nenhum modelo retornado pelo provider.")
+                        return@onSuccess
                     }
+                    val current = currentModelText()
+                    availableModels.clear()
+                    availableModels.addAll(models)
+                    modelField.removeAllItems()
+                    availableModels.forEach { modelField.addItem(it) }
+                    if (current.isNotEmpty()) {
+                        modelField.selectedItem = current
+                        if (modelField.selectedItem != current) {
+                            modelField.editor.item = current
+                        }
+                    }
+                }.onFailure { ex ->
+                    JOptionPane.warn(dialogPanel, "Erro ao carregar modelos: ${ex.message ?: ex.javaClass.simpleName}")
+                }
+            }
+        }
+    }
+
+    private fun buildLoader(provider: ProviderType): Pair<String?, () -> List<String>>? {
+        return when (provider) {
+            ProviderType.OPENROUTER -> {
+                val key = String(apiKeyField.password).trim().ifEmpty { GitBotSecrets.getOpenRouterApiKey().orEmpty() }
+                if (key.isEmpty()) return Pair("Informe a OpenRouter API Key antes de carregar os modelos.", { emptyList() })
+                Pair(null, { LLMProviderFactory.createOpenRouter(key).models().map { it.id }.sorted() })
+            }
+            ProviderType.OLLAMA -> {
+                val url = ollamaUrlField.text.trim()
+                if (url.isEmpty()) return Pair("Informe a URL do servidor Ollama antes de carregar os modelos.", { emptyList() })
+                Pair(null, { LLMProviderFactory.createOllama(url).models().map { it.id }.sorted() })
+            }
+        }
+    }
+
+    private fun testOllamaConnection() {
+        val url = ollamaUrlField.text.trim()
+        if (url.isEmpty()) {
+            JOptionPane.warn(dialogPanel, "Informe a URL do servidor Ollama.")
+            return
+        }
+        testConnectionButton.isEnabled = false
+        testConnectionButton.text = "Testing..."
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val health = runCatching { LLMProviderFactory.createOllama(url).ping() }
+                .getOrElse { ex -> ProviderHealth.Unknown(ex.message ?: ex.javaClass.simpleName) }
+
+            SwingUtilities.invokeLater {
+                testConnectionButton.isEnabled = true
+                testConnectionButton.text = "Test Connection"
+                when (health) {
+                    is ProviderHealth.Healthy ->
+                        JOptionPane.info(dialogPanel, "Ollama is running. ${health.modelCount} model(s) found.")
+                    is ProviderHealth.Unreachable ->
+                        JOptionPane.error(dialogPanel,
+                            "Cannot reach Ollama at $url.\n\n" +
+                            "• Install Ollama: https://ollama.com\n" +
+                            "• Start the service ('ollama serve' or launch the app)\n" +
+                            "• Verify the URL\n\nDetails: ${health.reason}")
+                    is ProviderHealth.Unauthorized ->
+                        JOptionPane.error(dialogPanel, "Ollama returned 401: ${health.reason}")
+                    is ProviderHealth.Unknown ->
+                        JOptionPane.error(dialogPanel, "Ollama check failed: ${health.reason}")
                 }
             }
         }
     }
 
     private fun configureModelField() {
-        // Intercept mouse clicks para exibir popup com busca (somente quando há modelos carregados)
         modelField.addMouseListener(object : java.awt.event.MouseAdapter() {
             override fun mousePressed(e: java.awt.event.MouseEvent) {
                 if (availableModels.isNotEmpty()) {
                     e.consume()
                     showSearchablePopup()
                 }
-                // Se a lista estiver vazia, o campo editável padrão do ComboBox é usado normalmente
             }
         })
     }
@@ -348,32 +418,29 @@ class GitBotConfigurable : Configurable {
         val listModel = DefaultListModel<String>()
         availableModels.forEach { listModel.addElement(it) }
 
-        val currentValue = (modelField.editor.item as? String) ?: (modelField.selectedItem as? String) ?: ""
-
+        val currentValue = currentModelText()
         val list = JBList(listModel).apply {
             selectionMode = ListSelectionModel.SINGLE_SELECTION
             setSelectedValue(currentValue, true)
         }
 
-        // Ajusta largura do popup à largura do combo, com mínimo de 400px
         val comboWidth = modelField.width.coerceAtLeast(400)
         val popupHeight = 400
 
-        val scrollPane = JBScrollPane(list)
-        scrollPane.preferredSize = java.awt.Dimension(comboWidth, popupHeight)
-
-        val panel = JPanel(BorderLayout()).apply {
-            add(searchField, BorderLayout.NORTH)
-            add(scrollPane, BorderLayout.CENTER)
-            preferredSize = java.awt.Dimension(comboWidth, popupHeight + 30) // +30 para o campo de busca
+        val scrollPane = JBScrollPane(list).apply {
+            preferredSize = Dimension(comboWidth, popupHeight)
         }
 
-        // Filtra a lista conforme o usuário digita
+        val container = JPanel(java.awt.BorderLayout()).apply {
+            add(searchField, java.awt.BorderLayout.NORTH)
+            add(scrollPane, java.awt.BorderLayout.CENTER)
+            preferredSize = Dimension(comboWidth, popupHeight + 30)
+        }
+
         searchField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
             override fun insertUpdate(e: javax.swing.event.DocumentEvent) = filterList()
             override fun removeUpdate(e: javax.swing.event.DocumentEvent) = filterList()
             override fun changedUpdate(e: javax.swing.event.DocumentEvent) = filterList()
-
             private fun filterList() {
                 val filter = searchField.text.trim()
                 listModel.clear()
@@ -383,15 +450,14 @@ class GitBotConfigurable : Configurable {
             }
         })
 
-        val popup = com.intellij.openapi.ui.popup.JBPopupFactory.getInstance()
-            .createComponentPopupBuilder(panel, searchField)
+        val popup = JBPopupFactory.getInstance()
+            .createComponentPopupBuilder(container, searchField)
             .setTitle("Select Model")
             .setMovable(true)
             .setResizable(true)
             .setRequestFocus(true)
             .createPopup()
 
-        // Seleciona o modelo ao clicar na lista
         list.addListSelectionListener {
             if (!it.valueIsAdjusting && list.selectedValue != null) {
                 modelField.selectedItem = list.selectedValue
@@ -402,20 +468,21 @@ class GitBotConfigurable : Configurable {
         popup.showUnderneathOf(modelField)
     }
 
-    private fun ensureDefaultsLoaded(settings: GitBotSettingsState) {
-        if (settings.promptPtBr.isBlank()) {
-            settings.promptPtBr = loadDefaultPrompt("PT_BR")
-        }
-        if (settings.promptEn.isBlank()) {
-            settings.promptEn = loadDefaultPrompt("EN")
-        }
+    private fun ensureDefaultsLoaded(s: GitBotSettingsState) {
+        if (s.promptPtBr.isBlank()) s.promptPtBr = loadDefaultPrompt("PT_BR")
+        if (s.promptEn.isBlank()) s.promptEn = loadDefaultPrompt("EN")
     }
 
-    private fun loadDefaultPrompt(lang: String): String {
-        return if (lang == "EN") {
-            PromptLoader.load("prompts/commit_prompt_en.txt")
-        } else {
-            PromptLoader.load("prompts/commit_prompt_ptbr.txt")
-        }
-    }
+    private fun loadDefaultPrompt(lang: String): String =
+        if (lang == "EN") PromptLoader.load("prompts/commit_prompt_en.txt")
+        else PromptLoader.load("prompts/commit_prompt_ptbr.txt")
+}
+
+private object JOptionPane {
+    fun warn(parent: JComponent?, msg: String) =
+        javax.swing.JOptionPane.showMessageDialog(parent, msg, "GitBot Commit", javax.swing.JOptionPane.WARNING_MESSAGE)
+    fun info(parent: JComponent?, msg: String) =
+        javax.swing.JOptionPane.showMessageDialog(parent, msg, "GitBot Commit", javax.swing.JOptionPane.INFORMATION_MESSAGE)
+    fun error(parent: JComponent?, msg: String) =
+        javax.swing.JOptionPane.showMessageDialog(parent, msg, "GitBot Commit", javax.swing.JOptionPane.ERROR_MESSAGE)
 }
