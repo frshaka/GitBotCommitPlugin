@@ -40,7 +40,9 @@ class OllamaProvider(private val baseUrl: String) : LLMProvider {
         } catch (ex: RuntimeException) {
             val msg = ex.message ?: "unknown error"
             if (msg.contains("404")) {
-                ProviderHealth.Unknown("Endpoint not found — Ollama may be older than 0.1.27")
+                // /api/tags 404 indica baseUrl/path incorretos, não versão.
+                // O 404 de versão antiga (0.1.27) só aparece em /v1/chat/completions.
+                ProviderHealth.Unknown("Endpoint /api/tags not found at $baseUrl. Verify the server URL is correct.")
             } else {
                 ProviderHealth.Unknown(msg)
             }
@@ -70,10 +72,15 @@ class OllamaProvider(private val baseUrl: String) : LLMProvider {
     private fun mapRuntime(ex: RuntimeException, modelId: String?): LLMProviderException {
         val msg = ex.message ?: ""
         return when {
+            // 404 numa requisição de completion com model conhecido geralmente é "model not found"
             msg.contains("Status: 404") && modelId != null && msg.contains("not found", ignoreCase = true) ->
                 LLMProviderException.ModelNotFound(modelId)
-            msg.contains("Status: 404") ->
+            // 404 em /v1/chat/completions (modelId presente mas sem "not found"): provável versão antiga
+            msg.contains("Status: 404") && modelId != null ->
                 LLMProviderException.GenericProviderError(404, "$msg\n\nTip: update Ollama to 0.1.27+ for /v1/chat/completions support.")
+            // 404 sem modelId = chamada de listagem (/api/tags) → URL incorreta
+            msg.contains("Status: 404") ->
+                LLMProviderException.GenericProviderError(404, "$msg\n\nTip: verify the Ollama server URL is correct.")
             msg.contains("Status: 401") ->
                 LLMProviderException.ProviderUnauthorized(msg)
             msg.contains("Status: 429") ->

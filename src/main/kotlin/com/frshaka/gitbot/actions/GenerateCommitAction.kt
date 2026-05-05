@@ -92,10 +92,14 @@ class GenerateCommitAction : AnAction() {
         val settings = GitBotSettingsService.getInstance().state
         val provider = ProviderType.fromName(settings.provider)
 
+        // Snapshot dos valores relevantes ANTES do background task.
+        // Evita race se o usuário alterar Settings entre o disparo da action e a execução.
+        val openRouterKey = GitBotSecrets.getOpenRouterApiKey()?.trim().orEmpty()
+        val ollamaUrl = settings.ollamaBaseUrl.trim()
+
         when (provider) {
             ProviderType.OPENROUTER -> {
-                val key = GitBotSecrets.getOpenRouterApiKey()?.trim().orEmpty()
-                if (key.isEmpty()) {
+                if (openRouterKey.isEmpty()) {
                     isRunning.set(false)
                     Messages.showErrorDialog(
                         project,
@@ -106,7 +110,7 @@ class GenerateCommitAction : AnAction() {
                 }
             }
             ProviderType.OLLAMA -> {
-                if (settings.ollamaBaseUrl.trim().isEmpty()) {
+                if (ollamaUrl.isEmpty()) {
                     isRunning.set(false)
                     Messages.showErrorDialog(
                         project,
@@ -145,28 +149,36 @@ class GenerateCommitAction : AnAction() {
             true
         ) {
             override fun run(indicator: ProgressIndicator) {
-                val client = LLMProviderFactory.create(settings)
-
+                var client: com.frshaka.gitbot.ai.LLMProvider? = null
                 try {
+                    // Provider construído com valores capturados — não relê GitBotSettingsState aqui.
+                    // Mantém o try/finally cobrindo a construção, garantindo que isRunning seja resetado
+                    // mesmo se a factory falhar (ex.: URL Ollama inválida lança IllegalArgumentException).
+                    client = when (provider) {
+                        ProviderType.OPENROUTER -> LLMProviderFactory.createOpenRouter(openRouterKey)
+                        ProviderType.OLLAMA -> LLMProviderFactory.createOllama(ollamaUrl)
+                    }
+
                     indicator.text = "GitBot Commit"
                     indicator.text2 = "Calling ${provider.displayName}..."
                     indicator.isIndeterminate = true
 
+                    val activeClient = client
                     if (indicator.isCanceled) {
-                        client.cancel()
+                        activeClient.cancel()
                         return
                     }
 
                     val commitText = try {
-                        client.completion(model, systemPrompt, userPrompt)
+                        activeClient.completion(model, systemPrompt, userPrompt)
                     } catch (ex: LLMProviderException) {
-                        if (client.isCanceled()) return
+                        if (activeClient.isCanceled()) return
                         ApplicationManager.getApplication().invokeLater {
-                            Messages.showErrorDialog(project, friendlyError(provider, settings.ollamaBaseUrl, ex), "GitBot Commit")
+                            Messages.showErrorDialog(project, friendlyError(provider, ollamaUrl, ex), "GitBot Commit")
                         }
                         return
                     } catch (ex: Exception) {
-                        if (client.isCanceled()) return
+                        if (activeClient.isCanceled()) return
                         ApplicationManager.getApplication().invokeLater {
                             Messages.showErrorDialog(project, "${provider.displayName} error: ${ex.message}", "GitBot Commit")
                         }
@@ -174,7 +186,7 @@ class GenerateCommitAction : AnAction() {
                     }
 
                     if (indicator.isCanceled) {
-                        client.cancel()
+                        activeClient.cancel()
                         return
                     }
 
@@ -183,9 +195,18 @@ class GenerateCommitAction : AnAction() {
                     ApplicationManager.getApplication().invokeLater {
                         showCommitPreviewDialog(project, commitText, commitMessageControl)
                     }
+                } catch (ex: IllegalArgumentException) {
+                    // Falha de validação na construção do provider (URL inválida etc.)
+                    ApplicationManager.getApplication().invokeLater {
+                        Messages.showErrorDialog(
+                            project,
+                            "${provider.displayName} configuration error: ${ex.message}",
+                            "GitBot Commit"
+                        )
+                    }
                 } finally {
                     if (indicator.isCanceled) {
-                        client.cancel()
+                        client?.cancel()
                     }
                     isRunning.set(false)
                 }
@@ -205,8 +226,12 @@ class GenerateCommitAction : AnAction() {
                 ProviderType.OPENROUTER ->
                     "Cannot reach OpenRouter. Check your internet connection.\n\nDetails: ${ex.message}"
             }
-            is LLMProviderException.ProviderUnauthorized ->
-                "Invalid OpenRouter API key. Update it in Settings → GitBot Commit.\n\nDetails: ${ex.message}"
+            is LLMProviderException.ProviderUnauthorized -> when (provider) {
+                ProviderType.OPENROUTER ->
+                    "Invalid OpenRouter API key. Update it in Settings → GitBot Commit.\n\nDetails: ${ex.message}"
+                ProviderType.OLLAMA ->
+                    "Ollama returned 401 (unauthorized). If you are running Ollama behind a proxy that requires authentication, check the proxy credentials.\n\nDetails: ${ex.message}"
+            }
             is LLMProviderException.ModelNotFound -> when (provider) {
                 ProviderType.OLLAMA ->
                     "Model '${ex.modelId}' not found in Ollama.\n\nPull it first: 'ollama pull ${ex.modelId}'"

@@ -62,6 +62,21 @@ class GitBotConfigurable : Configurable {
     private val loadModelsButton = JButton("Load Models")
     private val testConnectionButton = JButton("Test Connection")
 
+    private val providerCombo = ComboBox(ProviderType.entries.toTypedArray()).apply {
+        renderer = object : javax.swing.DefaultListCellRenderer() {
+            override fun getListCellRendererComponent(
+                list: javax.swing.JList<*>?,
+                value: Any?,
+                index: Int,
+                isSelected: Boolean,
+                cellHasFocus: Boolean
+            ): java.awt.Component {
+                val text = (value as? ProviderType)?.displayName ?: value?.toString().orEmpty()
+                return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus)
+            }
+        }
+    }
+
     private var dialogPanel: DialogPanel? = null
 
     override fun getDisplayName(): String = "GitBot Commit"
@@ -79,19 +94,7 @@ class GitBotConfigurable : Configurable {
             }
 
             row("Provider:") {
-                comboBox(ProviderType.entries.toList())
-                    .applyToComponent {
-                        renderer = javax.swing.DefaultListCellRenderer().also { it.horizontalAlignment = JLabel.LEFT }
-                        setRenderer { list, value, index, selected, focused ->
-                            val text = (value as? ProviderType)?.displayName ?: ""
-                            javax.swing.DefaultListCellRenderer().getListCellRendererComponent(list, text, index, selected, focused)
-                        }
-                        selectedItem = providerProperty.get()
-                        addActionListener {
-                            val newProvider = selectedItem as ProviderType
-                            onProviderSwitch(newProvider)
-                        }
-                    }
+                cell(providerCombo)
             }
 
             row("OpenRouter API Key:") {
@@ -185,6 +188,11 @@ class GitBotConfigurable : Configurable {
         loadModelsButton.addActionListener { loadModelsAsync() }
 
         testConnectionButton.addActionListener { testOllamaConnection() }
+
+        providerCombo.addActionListener {
+            val newProvider = providerCombo.selectedItem as? ProviderType ?: return@addActionListener
+            onProviderSwitch(newProvider)
+        }
     }
 
     private fun onProviderSwitch(newProvider: ProviderType) {
@@ -219,6 +227,17 @@ class GitBotConfigurable : Configurable {
     private var currentOpenRouterModel: String = ""
     private var currentOllamaModel: String = ""
 
+    /**
+     * Modelo "efetivo" para um provider — leva em conta tanto o valor visível no campo quando
+     * esse provider está ativo, quanto o snapshot salvo em memória ao alternar providers.
+     * Garante que edições em um provider sobrevivam até o Apply mesmo após troca de seleção.
+     */
+    private fun effectiveModelFor(provider: ProviderType): String =
+        if (providerProperty.get() == provider) currentModelText() else when (provider) {
+            ProviderType.OPENROUTER -> currentOpenRouterModel
+            ProviderType.OLLAMA -> currentOllamaModel
+        }
+
     override fun isModified(): Boolean {
         val s = settings
         ensureDefaultsLoaded(s)
@@ -227,17 +246,18 @@ class GitBotConfigurable : Configurable {
         val uiKey = String(apiKeyField.password).trim()
         val uiUrl = ollamaUrlField.text.trim()
         val uiProvider = providerProperty.get().name
-        val uiModel = currentModelText()
+        val uiOpenRouterModel = effectiveModelFor(ProviderType.OPENROUTER)
+        val uiOllamaModel = effectiveModelFor(ProviderType.OLLAMA)
         val uiLang = languageCombo.selectedItem as String
         val uiPrompt = promptArea.text
 
         val savedPrompt = if (uiLang == "EN") s.promptEn else s.promptPtBr
-        val savedModel = if (providerProperty.get() == ProviderType.OPENROUTER) s.model else s.ollamaModel
 
         return uiProvider != s.provider ||
                 uiKey != savedKey ||
                 uiUrl != s.ollamaBaseUrl ||
-                uiModel != savedModel ||
+                uiOpenRouterModel != s.model ||
+                uiOllamaModel != s.ollamaModel ||
                 uiLang != s.language ||
                 uiPrompt != savedPrompt
     }
@@ -249,7 +269,8 @@ class GitBotConfigurable : Configurable {
         val uiProvider = providerProperty.get()
         val uiKey = String(apiKeyField.password).trim()
         val uiUrl = ollamaUrlField.text.trim().ifEmpty { "http://localhost:11434" }
-        val uiModel = currentModelText()
+        val uiOpenRouterModel = effectiveModelFor(ProviderType.OPENROUTER)
+        val uiOllamaModel = effectiveModelFor(ProviderType.OLLAMA)
         val uiLang = languageCombo.selectedItem as String
         val uiPrompt = promptArea.text
 
@@ -259,16 +280,11 @@ class GitBotConfigurable : Configurable {
 
         s.provider = uiProvider.name
         s.ollamaBaseUrl = uiUrl
-        when (uiProvider) {
-            ProviderType.OPENROUTER -> {
-                s.model = uiModel
-                currentOpenRouterModel = uiModel
-            }
-            ProviderType.OLLAMA -> {
-                s.ollamaModel = uiModel
-                currentOllamaModel = uiModel
-            }
-        }
+        // Persiste AMBOS os modelos — não descarta o do provider inativo.
+        s.model = uiOpenRouterModel
+        s.ollamaModel = uiOllamaModel
+        currentOpenRouterModel = uiOpenRouterModel
+        currentOllamaModel = uiOllamaModel
         s.language = uiLang
         if (uiLang == "EN") s.promptEn = uiPrompt else s.promptPtBr = uiPrompt
     }
@@ -279,6 +295,10 @@ class GitBotConfigurable : Configurable {
 
         val provider = ProviderType.fromName(s.provider)
         providerProperty.set(provider)
+        // Sincroniza o combo visualmente sem disparar onProviderSwitch (que sobrescreveria estado).
+        if (providerCombo.selectedItem != provider) {
+            providerCombo.selectedItem = provider
+        }
 
         apiKeyField.text = GitBotSecrets.getOpenRouterApiKey() ?: ""
         ollamaUrlField.text = s.ollamaBaseUrl
@@ -313,8 +333,10 @@ class GitBotConfigurable : Configurable {
             ?: ""
 
     private fun loadModelsAsync() {
-        val provider = providerProperty.get()
-        val (validation, fetcher) = buildLoader(provider) ?: return
+        // Provider snapshot capturado no momento da chamada — usado para descartar callback
+        // se o usuário trocar para outro provider antes do fetch retornar.
+        val requestedProvider = providerProperty.get()
+        val (validation, fetcher) = buildLoader(requestedProvider) ?: return
 
         if (validation != null) {
             JOptionPane.warn(dialogPanel, validation)
@@ -329,6 +351,9 @@ class GitBotConfigurable : Configurable {
             SwingUtilities.invokeLater {
                 loadModelsButton.isEnabled = true
                 loadModelsButton.text = "Load Models"
+
+                // Stale check: se o provider visível mudou durante o fetch, descarta o resultado.
+                if (providerProperty.get() != requestedProvider) return@invokeLater
 
                 result.onSuccess { models ->
                     if (models.isEmpty()) {
